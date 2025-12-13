@@ -177,6 +177,64 @@ def get_lambada_test_dataset():
     dataset = datasets.Dataset.from_list(lambada_data)
     return dataset
 
+
+def get_babylm_dataset(data_dir, cache_dir=None):
+  """
+  Load BabyLM dataset from .train files in a directory.
+
+  Reads all .train files from the specified directory, combines them,
+  and splits into 90% train / 10% validation.
+
+  Args:
+    data_dir: Path to directory containing .train files (e.g., /data/train_10M)
+    cache_dir: Optional cache directory for the raw combined dataset
+
+  Returns:
+    datasets.DatasetDict with 'train' and 'validation' splits
+  """
+  import glob
+
+  # Find all .train files in the directory
+  train_files = glob.glob(os.path.join(data_dir, '*.train'))
+  if not train_files:
+    raise ValueError(
+      f'No .train files found in directory: {data_dir}')
+
+  LOGGER.info(f'Found {len(train_files)} .train files in {data_dir}')
+  LOGGER.info(f'Files: {[os.path.basename(f) for f in train_files]}')
+
+  # Read all files and combine
+  all_texts = []
+  for train_file in sorted(train_files):
+    LOGGER.info(f'Reading {os.path.basename(train_file)}...')
+    with open(train_file, 'r', encoding='utf-8') as f:
+      # Read line by line, each line is a text example
+      for line in f:
+        line = line.strip()
+        if line:  # Skip empty lines
+          all_texts.append({'text': line})
+
+  LOGGER.info(f'Loaded {len(all_texts)} total examples')
+
+  # Create dataset from combined texts
+  full_dataset = datasets.Dataset.from_list(all_texts)
+
+  # Split into 90% train / 10% validation
+  split_dataset = full_dataset.train_test_split(
+    test_size=0.1, seed=42, shuffle=True)
+
+  # Rename 'test' to 'validation' to match expected format
+  dataset_dict = datasets.DatasetDict({
+    'train': split_dataset['train'],
+    'validation': split_dataset['test']
+  })
+
+  LOGGER.info(
+    f'Split dataset: {len(dataset_dict["train"])} train, '
+    f'{len(dataset_dict["validation"])} validation')
+
+  return dataset_dict
+
 def get_text8_dataset(cache_dir, max_seq_length=256,
                       drop_last=True, crop_train=False):
   """Adapted from:
@@ -302,13 +360,14 @@ def _group_texts(examples, block_size, bos, eos):
 
 def get_dataset(
     dataset_name, tokenizer, wrap, mode, cache_dir,
-    block_size=1024, num_proc=len(os.sched_getaffinity(0)), streaming=False):
+    block_size=1024, num_proc=len(os.sched_getaffinity(0)), streaming=False,
+    data_dir=None):
   if wrap:
     filename = f'{dataset_name}_{mode}_bs{block_size}_wrapped.dat'
   else:
     filename = f'{dataset_name}_{mode}_bs{block_size}_unwrapped.dat'
   _path = os.path.join(cache_dir, filename)
-  
+
   if utils.fsspec_exists(_path):
     LOGGER.info(f'Loading data from: {_path}')
     return datasets.load_from_disk(_path).with_format('torch')
@@ -318,7 +377,7 @@ def get_dataset(
   if mode == 'train' and crop_train:
     # double block size for sub-sampling
     block_size *= 2
-  
+
   if dataset_name == 'wikitext103':
     dataset = datasets.load_dataset(
       'wikitext',
@@ -370,6 +429,13 @@ def get_dataset(
       'ag_news',
       cache_dir=cache_dir,
       streaming=streaming)
+  elif dataset_name == 'babylm':
+    # BabyLM dataset - load from .train files in data directory
+    if data_dir is None:
+      raise ValueError(
+        'babylm dataset requires data_dir to be set. '
+        'Set config.data.data_dir to the directory containing .train files')
+    dataset = get_babylm_dataset(data_dir, cache_dir=cache_dir)
   else:
     dataset = datasets.load_dataset(
       dataset_name,
@@ -379,6 +445,9 @@ def get_dataset(
   if dataset_name in ['lambada', 'openwebtext-train',
                       'openwebtext-valid']:
     data = dataset
+  elif dataset_name == 'babylm':
+    # BabyLM already returns DatasetDict with train/validation splits
+    data = dataset[mode]
   else:
     data = dataset[mode]
 
@@ -401,7 +470,7 @@ def get_dataset(
         text[i] = detokenizer(t)
       return text
     return detok
-  
+
   EOS = tokenizer.encode(tokenizer.eos_token)[0]
   BOS = tokenizer.encode(tokenizer.bos_token)[0]
 
@@ -412,7 +481,7 @@ def get_dataset(
       text = example['article']
     else:
       text = example['text']
-    
+
     if detokenizer is not None:
       text = _apply_detokenizer(detokenizer)(text)
 
@@ -492,8 +561,102 @@ def get_tokenizer(config):
     tokenizer = transformers.BertTokenizer.\
       from_pretrained('bert-base-uncased')
   else:
-    tokenizer = transformers.AutoTokenizer.from_pretrained(
-      config.data.tokenizer_name_or_path)
+    tokenizer_path = config.data.tokenizer_name_or_path
+
+    # Check if it's a single .json file (BPE tokenizer from tokenizers library)
+    # Use fsspec for path checking to handle Google Drive and other remote paths
+    if tokenizer_path.endswith('.json'):
+      # It's a JSON file - try to load it
+      if not utils.fsspec_exists(tokenizer_path):
+        raise FileNotFoundError(
+          f'Tokenizer file not found: {tokenizer_path}\n'
+          f'\n'
+          f'Since you are training from scratch, you need to create a tokenizer first.\n'
+          f'Run the tokenizer training script:\n'
+          f'  python train_tokenizer.py \\\n'
+          f'    --data_dir /data/train_10M \\\n'
+          f'    --output_path {tokenizer_path} \\\n'
+          f'    --vocab_size 32000\n'
+          f'\n'
+          f'This will train a BPE tokenizer on your BabyLM dataset and save it to the specified path.')
+      LOGGER.info(f'Loading tokenizer from JSON file: {tokenizer_path}')
+      try:
+        # Load using tokenizers library
+        tokenizer_obj = tokenizers.Tokenizer.from_file(tokenizer_path)
+        # Wrap in PreTrainedTokenizerFast for compatibility
+        # Set special tokens explicitly to ensure they're recognized
+        tokenizer = transformers.PreTrainedTokenizerFast(
+          tokenizer_object=tokenizer_obj,
+          pad_token="[PAD]",
+          unk_token="[UNK]",
+          cls_token="[CLS]",
+          sep_token="[SEP]",
+          mask_token="[MASK]",
+          bos_token="[CLS]",  # Use [CLS] as BOS
+          eos_token="[SEP]",  # Use [SEP] as EOS
+        )
+        # Ensure special token attributes are set (sometimes PreTrainedTokenizerFast
+        # doesn't set them properly from the tokenizer_object)
+        if tokenizer.bos_token is None:
+          # Try to get from cls_token
+          if tokenizer.cls_token is not None:
+            tokenizer.bos_token = tokenizer.cls_token
+            tokenizer.bos_token_id = tokenizer.cls_token_id
+          else:
+            # Fallback: try to get token ID directly
+            try:
+              bos_id = tokenizer_obj.token_to_id("[CLS]")
+              if bos_id is not None:
+                tokenizer.bos_token = "[CLS]"
+                tokenizer.bos_token_id = bos_id
+            except:
+              pass
+        if tokenizer.eos_token is None:
+          # Try to get from sep_token
+          if tokenizer.sep_token is not None:
+            tokenizer.eos_token = tokenizer.sep_token
+            tokenizer.eos_token_id = tokenizer.sep_token_id
+          else:
+            # Fallback: try to get token ID directly
+            try:
+              eos_id = tokenizer_obj.token_to_id("[SEP]")
+              if eos_id is not None:
+                tokenizer.eos_token = "[SEP]"
+                tokenizer.eos_token_id = eos_id
+            except:
+              pass
+        LOGGER.info(f'✓ Tokenizer loaded successfully from {tokenizer_path}')
+        LOGGER.info(f'  Vocab size: {tokenizer.vocab_size}')
+        LOGGER.info(f'  BOS token: {tokenizer.bos_token} (ID: {tokenizer.bos_token_id})')
+        LOGGER.info(f'  EOS token: {tokenizer.eos_token} (ID: {tokenizer.eos_token_id})')
+      except Exception as e:
+        raise ValueError(
+          f'Failed to load tokenizer from {tokenizer_path}.\n'
+          f'Error: {e}\n'
+          f'Make sure the file is a valid tokenizer.json file from the tokenizers library.')
+    elif utils.fsspec_exists(tokenizer_path):
+      # It's a directory, use AutoTokenizer
+      LOGGER.info(f'Loading tokenizer from directory: {tokenizer_path}')
+      tokenizer = transformers.AutoTokenizer.from_pretrained(tokenizer_path)
+    else:
+      # Assume it's a HuggingFace model ID or file doesn't exist
+      # Try HuggingFace first, then provide helpful error if that fails
+      try:
+        LOGGER.info(f'Attempting to load tokenizer from HuggingFace: {tokenizer_path}')
+        tokenizer = transformers.AutoTokenizer.from_pretrained(tokenizer_path)
+      except Exception as e:
+        raise FileNotFoundError(
+          f'Tokenizer not found: {tokenizer_path}\n'
+          f'HuggingFace error: {e}\n'
+          f'\n'
+          f'Since you are training from scratch, you need to create a tokenizer first.\n'
+          f'Run the tokenizer training script:\n'
+          f'  python train_tokenizer.py \\\n'
+          f'    --data_dir /data/train_10M \\\n'
+          f'    --output_path {tokenizer_path} \\\n'
+          f'    --vocab_size 32000\n'
+          f'\n'
+          f'This will train a BPE tokenizer on your BabyLM dataset and save it to the specified path.')
 
   if (isinstance(tokenizer, transformers.GPT2TokenizerFast)
       or isinstance(tokenizer, transformers.GPT2Tokenizer)):
@@ -520,16 +683,43 @@ def get_tokenizer(config):
     tokenizer.add_special_tokens({'pad_token': '[PAD]'})
 
   return tokenizer
-    
+
 
 def get_dataloaders(config, tokenizer, skip_train=False,
                     skip_valid=False, valid_seed=None):
   num_gpus = torch.cuda.device_count()
-  assert (config.loader.global_batch_size
-          == (config.loader.batch_size
-              * config.trainer.num_nodes
-              * num_gpus
-              * config.trainer.accumulate_grad_batches))
+  # Calculate what batch_size should be to match global_batch_size
+  # Effective batch size = batch_size * num_nodes * num_gpus * accumulate_grad_batches
+  # So: batch_size = global_batch_size / (num_nodes * num_gpus * accumulate_grad_batches)
+  expected_batch_size = (config.loader.global_batch_size
+                         // (config.trainer.num_nodes
+                             * num_gpus
+                             * config.trainer.accumulate_grad_batches))
+
+  # Check if the calculated batch_size matches what's expected
+  if config.loader.batch_size != expected_batch_size:
+    LOGGER.warning(
+      f'Batch size mismatch: config has batch_size={config.loader.batch_size}, '
+      f'but expected {expected_batch_size} for '
+      f'global_batch_size={config.loader.global_batch_size}, '
+      f'num_nodes={config.trainer.num_nodes}, '
+      f'num_gpus={num_gpus}, '
+      f'accumulate_grad_batches={config.trainer.accumulate_grad_batches}. '
+      f'Using expected batch_size={expected_batch_size}.')
+    # Override with correct batch_size
+    config.loader.batch_size = expected_batch_size
+
+  # Verify effective batch size matches global
+  effective_batch_size = (config.loader.batch_size
+                          * config.trainer.num_nodes
+                          * num_gpus
+                          * config.trainer.accumulate_grad_batches)
+  if config.loader.global_batch_size != effective_batch_size:
+    raise ValueError(
+      f'Cannot achieve global_batch_size={config.loader.global_batch_size} with '
+      f'batch_size={config.loader.batch_size}, num_nodes={config.trainer.num_nodes}, '
+      f'num_gpus={num_gpus}, accumulate_grad_batches={config.trainer.accumulate_grad_batches}. '
+      f'Effective batch size would be {effective_batch_size}.')
   if config.loader.global_batch_size % (
     num_gpus * config.trainer.accumulate_grad_batches) != 0:
     raise ValueError(
@@ -549,8 +739,9 @@ def get_dataloaders(config, tokenizer, skip_train=False,
       mode='train',
       wrap=config.data.wrap,
       cache_dir=config.data.cache_dir,
-      block_size=config.model.length)
-  
+      block_size=config.model.length,
+      data_dir=getattr(config.data, 'data_dir', None))
+
   if config.data.valid in ['text8', 'lm1b', 'ag_news']:
     validation_split = 'test'
   else:
@@ -565,7 +756,8 @@ def get_dataloaders(config, tokenizer, skip_train=False,
       mode=validation_split,
       cache_dir=config.data.cache_dir,
       block_size=config.model.length,
-      streaming=False)
+      streaming=False,
+      data_dir=getattr(config.data, 'data_dir', None))
 
   if skip_train:
     train_loader = None

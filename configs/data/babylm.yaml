@@ -1,0 +1,14 @@
+train: babylm
+valid: babylm  # Uses same data, automatically split 90/10 for train/validation
+tokenizer_name_or_path: /content/drive/MyDrive/babylm-edlm/tokenizer/tokenizer.json  # Path to your tokenizer
+cache_dir: /content/drive/MyDrive/babylm-edlm/cache  # Directory for caching tokenized datasets
+data_dir: /content/drive/MyDrive/babylm-edlm/data/train_10M  # Directory containing .train files (change to train_100M for 100M token dataset)
+wrap: True
+streaming: False
+
+# Usage examples:
+# For 10M tokens: python main.py data=babylm
+# For 100M tokens: python main.py data=babylm data.data_dir=/content/drive/MyDrive/babylm-edlm/data/train_100M
+# To override tokenizer path: python main.py data.tokenizer_name_or_path=/path/to/tokenizer.json
+# To override data directory: python main.py data.data_dir=/path/to/train_10M
+

@@ -8,40 +8,25 @@ import omegaconf
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from causal_conv1d import (
-    causal_conv1d_fn,
-    causal_conv1d_update,
-)
+from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
 from einops import rearrange, repeat
-from mamba_ssm.ops.selective_scan_interface import (
-    mamba_inner_fn,
-    selective_scan_fn,
-)
+from mamba_ssm.ops.selective_scan_interface import (mamba_inner_fn,
+                                                    selective_scan_fn)
 from torch import Tensor
 from transformers import PretrainedConfig, PreTrainedModel
-from transformers.modeling_outputs import (
-    BaseModelOutputWithNoAttention,
-    MaskedLMOutput,
-)
+from transformers.modeling_outputs import (BaseModelOutputWithNoAttention,
+                                           MaskedLMOutput)
 
 try:
-    from mamba_ssm.ops.triton.layernorm import (
-        RMSNorm,
-        layer_norm_fn,
-        rms_norm_fn,
-    )
+    from mamba_ssm.ops.triton.layernorm import (RMSNorm, layer_norm_fn,
+                                                rms_norm_fn)
 except ImportError:
     RMSNorm, layer_norm_fn, rms_norm_fn = None, None, None
-from mamba_ssm.ops.triton.selective_state_update import (
-    selective_state_update,
-)
+from mamba_ssm.ops.triton.selective_state_update import selective_state_update
 
-from models.dit import (
-    TimestepEmbedder,
-    bias_dropout_add_scale_fused_inference,
-    bias_dropout_add_scale_fused_train,
-    modulate_fused,
-)
+from models.dit import (TimestepEmbedder,
+                        bias_dropout_add_scale_fused_inference,
+                        bias_dropout_add_scale_fused_train, modulate_fused)
 
 # sys.path.append('mamba_wrappers/mamba2')
 # from .mamba2.src.modules.ssd import SSD as Mamba
@@ -751,7 +736,7 @@ class BiMambaMixerModel(nn.Module):
 
     def pre_apply_temb(self, input_embeds, time_embeds):
         """Prepend/add time embeddings to input embeddings at the start of the forward pass.
-        
+
         Args:
             input_embeds: Input embeddings. (batch, seqlen, d_model)
             time_embeds: Timestep embeddings. (batch, d_temb)

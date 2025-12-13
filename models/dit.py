@@ -191,7 +191,7 @@ class TimestepEmbedder(nn.Module):
 
 class LabelEmbedder(nn.Module):
   """Embeds class labels into vector representations.
-  
+
   Also handles label dropout for classifier-free guidance.
   """
   def __init__(self, num_classes, cond_size):
@@ -204,7 +204,7 @@ class LabelEmbedder(nn.Module):
   def forward(self, labels):
     embeddings = self.embedding_table(labels)
     return embeddings
-    
+
 
 #################################################################################
 #                                 Core Model                                    #
@@ -271,7 +271,7 @@ class DDiTBlock(nn.Module):
       cu_seqlens = seqlens.cumsum(-1)
     x = flash_attn.flash_attn_interface.flash_attn_varlen_qkvpacked_func(
       qkv, cu_seqlens, seq_len, 0., causal=False)
-    
+
     x = rearrange(x, '(b s) h d -> b s (h d)', b=batch_size)
 
     x = bias_dropout_scale_fn(self.attn_out(x),

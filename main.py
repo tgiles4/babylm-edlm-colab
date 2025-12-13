@@ -1,4 +1,5 @@
 import os
+import time
 
 import fsspec
 import hydra
@@ -12,7 +13,16 @@ import dataloader
 import diffusion
 import utils
 
-import time
+# Fix for PyTorch 2.6+ weights_only=True default
+# Allowlist omegaconf.DictConfig for checkpoint loading
+# This is needed because Lightning checkpoints contain omegaconf.DictConfig objects
+try:
+  from omegaconf import dictconfig
+  if hasattr(torch.serialization, 'add_safe_globals'):
+    torch.serialization.add_safe_globals([dictconfig.DictConfig])
+except (AttributeError, TypeError, ImportError):
+  # Fallback for older PyTorch versions or if add_safe_globals doesn't exist
+  pass
 
 omegaconf.OmegaConf.register_new_resolver(
   'cwd', os.getcwd)
@@ -25,14 +35,23 @@ omegaconf.OmegaConf.register_new_resolver(
 
 
 def _load_from_checkpoint(config, tokenizer):
+  # Try to determine model type from checkpoint or config
+  use_energy = config.get('use_energy', False)
+
   if config.ebm_backbone == 'ar':
     return diffusion.EBM(
       config, tokenizer=tokenizer).to('cuda')
-  
-  return diffusion.EBM.load_from_checkpoint(
-    config.eval.checkpoint_path,
-    tokenizer=tokenizer,
-    config=config)
+
+  if use_energy:
+    return diffusion.EBM.load_from_checkpoint(
+      config.eval.checkpoint_path,
+      tokenizer=tokenizer,
+      config=config)
+  else:
+    return diffusion.Diffusion.load_from_checkpoint(
+      config.eval.checkpoint_path,
+      tokenizer=tokenizer,
+      config=config)
 
 
 @L.pytorch.utilities.rank_zero_only
@@ -41,7 +60,7 @@ def _print_config(
   resolve: bool = True,
   save_cfg: bool = True) -> None:
   """Prints content of DictConfig using Rich library and its tree structure.
-  
+
   Args:
     config (DictConfig): Configuration composed by Hydra.
     resolve (bool): Whether to resolve reference fields of DictConfig.
@@ -64,9 +83,11 @@ def _print_config(
     branch.add(rich.syntax.Syntax(branch_content, 'yaml'))
   rich.print(tree)
   if save_cfg:
+    # Save config to checkpoint directory
+    config_dir = config.checkpointing.save_dir
+    os.makedirs(config_dir, exist_ok=True)
     with fsspec.open(
-      '{}/config_tree.txt'.format(
-        config.checkpointing.save_dir), 'w') as fp:
+      '{}/config_tree.txt'.format(config_dir), 'w') as fp:
       rich.print(tree, file=fp)
 
 
@@ -144,9 +165,13 @@ def _ppl_eval(config, logger, tokenizer):
 
   wandb_logger = None
   if config.get('wandb', None) is not None:
+    wandb_config = dict(config.wandb)
+    # Convert tags to strings (wandb requires all tags to be strings)
+    if 'tags' in wandb_config and wandb_config['tags'] is not None:
+      wandb_config['tags'] = [str(tag) for tag in wandb_config['tags']]
     wandb_logger = L.pytorch.loggers.WandbLogger(
       config=omegaconf.OmegaConf.to_object(config),
-      ** config.wandb)
+      ** wandb_config)
   callbacks = []
   if 'callbacks' in config:
     for _, callback in config.callbacks.items():
@@ -166,17 +191,34 @@ def _train(config, logger, tokenizer):
   logger.info('Starting Training.')
   wandb_logger = None
   if config.get('wandb', None) is not None:
+    wandb_config = dict(config.wandb)
+    # Convert tags to strings (wandb requires all tags to be strings)
+    if 'tags' in wandb_config and wandb_config['tags'] is not None:
+      wandb_config['tags'] = [str(tag) for tag in wandb_config['tags']]
+    # Create save directory if specified
+    if 'save_dir' in wandb_config:
+      os.makedirs(wandb_config['save_dir'], exist_ok=True)
+      logger.info(f'wandb logs will be saved to: {wandb_config["save_dir"]}')
+    # Log wandb initialization
+    logger.info('Initializing wandb logger...')
+    logger.info(f'  Project: {wandb_config.get("project", "text-diffusion")}')
+    logger.info(f'  Run name: {wandb_config.get("name", "auto-generated")}')
     wandb_logger = L.pytorch.loggers.WandbLogger(
       config=omegaconf.OmegaConf.to_object(config),
-      ** config.wandb)
+      ** wandb_config)
+    logger.info('✓ wandb logger initialized')
 
-  if (config.checkpointing.resume_from_ckpt
-      and config.checkpointing.resume_ckpt_path is not None
-      and utils.fsspec_exists(
-        config.checkpointing.resume_ckpt_path)):
-    ckpt_path = config.checkpointing.resume_ckpt_path
-  else:
-    ckpt_path = None
+  # Resolve checkpoint path if resuming
+  ckpt_path = None
+  if config.checkpointing.resume_from_ckpt:
+    resume_path = omegaconf.OmegaConf.to_container(
+      config.checkpointing.resume_ckpt_path, resolve=True)
+    if resume_path and utils.fsspec_exists(resume_path):
+      ckpt_path = resume_path
+      logger.info(f'Resuming from checkpoint: {ckpt_path}')
+    else:
+      logger.warning(
+        f'Checkpoint path not found: {resume_path}. Starting fresh training.')
 
   # Lightning callbacks
   callbacks = []
@@ -188,8 +230,15 @@ def _train(config, logger, tokenizer):
     config, tokenizer)
   _print_batch(train_ds, valid_ds, tokenizer)
 
-  model = diffusion.EBM(
-    config, tokenizer=valid_ds.tokenizer)
+  # Instantiate model based on use_energy flag
+  if config.get('use_energy', False):
+    logger.info('Using EBM model (DIT with Energy)')
+    model = diffusion.EBM(
+      config, tokenizer=valid_ds.tokenizer)
+  else:
+    logger.info('Using Diffusion model (DIT without Energy)')
+    model = diffusion.Diffusion(
+      config, tokenizer=valid_ds.tokenizer)
 
   trainer = hydra.utils.instantiate(
     config.trainer,
@@ -206,7 +255,7 @@ def main(config):
   """Main entry point for training."""
   L.seed_everything(config.seed)
   _print_config(config, resolve=True, save_cfg=True)
-  
+
   logger = utils.get_logger(__name__)
   tokenizer = dataloader.get_tokenizer(config)
 

@@ -1,0 +1,41 @@
+# Core dependencies
+numpy<2.0.0  # Pin to < 2.0.0 to avoid compatibility issues with datasets
+datasets>=2.20.0  # Updated for numpy 2.x compatibility
+einops==0.7.0
+fsspec==2024.2.0
+h5py==3.10.0
+hydra-core==1.3.2
+ipdb==0.13.13
+lightning==2.2.1
+notebook==7.1.1
+nvitop==1.3.2
+omegaconf==2.3.0
+packaging==23.2
+pandas==2.2.1
+rich==13.7.1
+seaborn==0.13.2
+scikit-learn==1.4.0
+timm==0.9.16
+transformers==4.38.2
+wandb>=0.16.0  # Updated to remove pathtools dependency (incompatible with Python 3.12)
+
+# Required build dependencies
+ninja  # Required for compiling flash-attn and other CUDA extensions
+
+# Required model dependencies (imported in models/__init__.py and model files)
+# These MUST be installed for the code to work
+flash-attn  # Required by models/dit.py and models/autoregressive.py
+causal-conv1d  # Required by models/dimamba.py
+mamba-ssm  # Required by models/dimamba.py
+
+# Note: PyTorch and CUDA are pre-installed in Colab
+# If you need specific versions, install via:
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+#
+# Note: flash-attn, causal-conv1d, and mamba-ssm require compilation
+# They may take 5-15 minutes to install. Installation order matters:
+# 1. ninja (build tool)
+# 2. flash-attn (requires ninja)
+# 3. causal-conv1d (requires ninja)
+# 4. mamba-ssm (requires ninja and causal-conv1d)
+

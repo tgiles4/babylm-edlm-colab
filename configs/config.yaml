@@ -10,11 +10,13 @@ defaults:
 mode: train  # train / ppl_eval / sample_eval
 diffusion: absorbing_state
 backbone: dit  # dit / dimamba / ar : backbone for Diffusion
-ebm_backbone: hf_dit  # dit / dimamba / ar : backbone for EBM
+ebm_backbone: dit  # dit / dimamba / ar : backbone for EBM (used when use_energy=True)
 parameterization: subs  # subs / d3pm / sedd
 time_conditioning: False
-T: 0  # 0 (continuous time) / 1000 
+T: 0  # 0 (continuous time) / 1000
 subs_masking: False
+use_energy: False  # Set to True to use EBM (DIT with Energy), False for standard DIT
+dataset_size: 10M  # 10M or 100M - used for logging/naming (actual path set in data.data_dir)
 
 seed: 1
 
@@ -88,22 +90,31 @@ wandb:
   notes: Mulan for text
   group: null
   job_type: null
-  name: null
-  id: ${.name}_${seed}
+  name: ${dataset_size}_${use_energy}_${noise.type}  # Auto-generate name from config
+  id: ${dataset_size}_${use_energy}_${noise.type}_${seed}
   tags:
     - ${noise.type}
     - ${data.train}
     - ${data.valid}
+    - ${dataset_size}
+    - ${use_energy}
+  # Colab-specific settings
+  save_dir: /content/drive/MyDrive/babylm-edlm/wandb  # Save wandb logs to Google Drive
+  offline: false  # Set to true if you want offline mode (sync later)
 
 hydra:
   run:
-    dir: ./outputs/${data.train}/${now:%Y.%m.%d}/${now:%H%M%S}
+    # Save outputs to Google Drive for Colab persistence
+    # Override with: python main.py hydra.run.dir=/content/drive/MyDrive/babylm-edlm/outputs/...
+    dir: /content/drive/MyDrive/babylm-edlm/outputs/${data.train}/${dataset_size}/${use_energy}/${now:%Y.%m.%d}/${now:%H%M%S}
   job:
     chdir: true
 
 checkpointing:
-  # Use custom `save_dir` if, e.g., saving to S3 bucket, otherwise leave this parameter as is
-  save_dir: ${cwd:}
-  # Note: `checkpoints` path should correspond to `checkpoint_every_n_steps.dirpath`
-  resume_from_ckpt: true
+  # Save checkpoints to Google Drive for Colab persistence
+  # Each experiment run gets its own unique checkpoint directory
+  # Override with: python main.py checkpointing.save_dir=/content/drive/MyDrive/babylm-edlm/checkpoints
+  save_dir: /content/drive/MyDrive/babylm-edlm/checkpoints/${data.train}/${dataset_size}/${use_energy}/${now:%Y.%m.%d}/${now:%H%M%S}
+  # Note: `checkpoints` subdirectory is added by the callback dirpath
+  resume_from_ckpt: false  # Set to true to resume from a specific checkpoint
   resume_ckpt_path: ${.save_dir}/checkpoints/last.ckpt
