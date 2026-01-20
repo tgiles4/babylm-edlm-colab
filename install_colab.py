@@ -70,6 +70,15 @@ def main():
         print("\n⚠ Warning: Some packages in requirements.txt may have failed.")
         print("Continuing with manual installation of compiled packages...")
 
+    # Step 2.5: Install triton (REQUIRED for torch.library.wrap_triton used by flash-attn)
+    print("\n⚠ Note: Installing triton (required for flash-attn)...")
+    success = run_command(
+        "pip install -q triton>=2.1.0",
+        "triton (REQUIRED for flash-attn)"
+    )
+    if not success:
+        print("\n⚠ Warning: triton installation failed, but continuing...")
+
     # Step 3: Install flash-attention (REQUIRED - used by dit.py and autoregressive.py)
     print("\n⚠ Note: flash-attention installation may take 5-10 minutes...")
     success = run_command(

@@ -317,7 +317,7 @@ class Diffusion(L.LightningModule):
   def forward(self, x, sigma):
     """Returns log score."""
     sigma = self._process_sigma(sigma)
-    with torch.cuda.amp.autocast(dtype=torch.float32):
+    with torch.amp.autocast('cuda', dtype=torch.float32):
       logits = self.backbone(x, sigma)
 
     if self.parameterization == 'subs':
@@ -1134,7 +1134,7 @@ class EBM(Diffusion):
   def ebm_forward(self, xt, sigma, x0=None, log_p_x0=None, attention_mask=None):
     sigma = self._process_sigma(sigma)
 
-    with torch.cuda.amp.autocast(dtype=torch.float32):
+    with torch.amp.autocast('cuda', dtype=torch.float32):
       indices = xt
 
       # rewrite the forward pass of the backbone
@@ -1161,7 +1161,7 @@ class EBM(Diffusion):
 
         rotary_cos_sin = self.ebm.rotary_emb(x)
 
-        with torch.cuda.amp.autocast(dtype=torch.bfloat16):
+        with torch.amp.autocast('cuda', dtype=torch.bfloat16):
           for i in range(len(self.ebm.blocks)):
             x = self.ebm.blocks[i](x, rotary_cos_sin, c, seqlens=None)
           x = self.ebm.output_layer(x, c)
@@ -1184,7 +1184,7 @@ class EBM(Diffusion):
         x = x0_emb
 
         rotary_cos_sin = self.ebm.rotary_emb(x)
-        with torch.cuda.amp.autocast(dtype=torch.bfloat16):
+        with torch.amp.autocast('cuda', dtype=torch.bfloat16):
           for i in range(len(self.ebm.blocks)):
             x = self.ebm.blocks[i](
               x, rotary_cos_sin, None, seqlens=None
@@ -1206,7 +1206,7 @@ class EBM(Diffusion):
           logits[unmasked_indices] = self.neg_infinity
           logits[unmasked_indices, xt_output_tokens[unmasked_indices]] = 0
 
-        with torch.cuda.amp.autocast(dtype=torch.bfloat16):
+        with torch.amp.autocast('cuda', dtype=torch.bfloat16):
           energy_ar = (logits.gather(
             -1, x0_output_tokens[:, :, None])[:, :, 0]).sum(dim=-1, keepdim=True)
           energy_diffusion = (log_p_x0.gather(

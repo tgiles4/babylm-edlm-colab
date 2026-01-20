@@ -17,6 +17,12 @@ pip install -q -r requirements.txt || {
     echo "Continuing with manual installation of compiled packages..."
 }
 
+# Step 2.5: Install triton (REQUIRED for torch.library.wrap_triton used by flash-attn)
+echo "Installing triton (required for flash-attn)..."
+pip install -q triton>=2.1.0 || {
+    echo "Warning: triton installation failed, but continuing..."
+}
+
 # Step 3: Install flash-attention (REQUIRED - used by dit.py and autoregressive.py)
 # This requires CUDA and ninja, may take 5-10 minutes
 echo "Installing flash-attention (REQUIRED, this may take 5-10 minutes)..."

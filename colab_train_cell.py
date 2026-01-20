@@ -2,10 +2,11 @@
 # Colab Notebook Cell - Copy and paste this entire block into a Colab cell
 # ============================================================================
 
-from IPython.display import HTML, display
+import os
 import subprocess
 import sys
-import os
+
+from IPython.display import HTML, display
 
 # JavaScript to keep Colab connection alive (clicks "Connect" button every 60 seconds)
 keep_alive_js = """
