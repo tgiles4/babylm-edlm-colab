@@ -1127,13 +1127,28 @@ class EBM(Diffusion):
       with open_dict(config_diffusion_ckpt):
         config_diffusion_ckpt.use_energy = False  # Load as regular diffusion model
 
-      # Load the pretrained diffusion model from checkpoint
-      pretrained_diffusion = Diffusion.load_from_checkpoint(
-        config.eval.checkpoint_path,
-        tokenizer=tokenizer,
-        config=config_diffusion_ckpt,
-        strict=False  # Allow partial loading if there are minor differences
-      )
+      # Temporarily patch torch.load to use weights_only=False for checkpoint loading
+      # This is safe since we trust the checkpoints (they were trained with this codebase)
+      original_load = torch.load
+      def patched_load(*args, **kwargs):
+        # If weights_only is not explicitly set, default to False for checkpoint loading
+        if 'weights_only' not in kwargs:
+          kwargs['weights_only'] = False
+        return original_load(*args, **kwargs)
+
+      try:
+        torch.load = patched_load
+        # Load the pretrained diffusion model from checkpoint
+        pretrained_diffusion = Diffusion.load_from_checkpoint(
+          config.eval.checkpoint_path,
+          tokenizer=tokenizer,
+          config=config_diffusion_ckpt,
+          strict=False  # Allow partial loading if there are minor differences
+        )
+      finally:
+        # Restore original torch.load
+        torch.load = original_load
+
       # Replace the backbone with the loaded one
       self.backbone = pretrained_diffusion.backbone
 
