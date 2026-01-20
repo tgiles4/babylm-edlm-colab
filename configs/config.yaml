@@ -79,6 +79,7 @@ trainer:
   gradient_clip_val: 1.0
   precision: 'bf16'
   num_sanity_val_steps: 2
+  max_epochs: 10  # Limit training to 10 epochs (training stops when either max_epochs or max_steps is reached)
   max_steps: 1_000_000
   log_every_n_steps: 10
   limit_train_batches: 1.0   # train on full dataset, can be used to toggle quick run
