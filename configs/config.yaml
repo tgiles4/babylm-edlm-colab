@@ -55,7 +55,11 @@ training:
   change_of_variables: False
 
 eval:
-  checkpoint_path: ''  # Used to evaluate a checkpoint after training.
+  # Path to checkpoint for evaluation or to load pretrained diffusion model as EBM backbone
+  # For Lightning checkpoints (.ckpt files): provide full path, e.g., '/content/drive/MyDrive/path/to/model.ckpt'
+  # For HuggingFace models: provide model name or path
+  # When training EBM (use_energy=True), this loads the diffusion model as the frozen backbone
+  checkpoint_path: ''  # Used to evaluate a checkpoint after training, or to load pretrained diffusion as EBM backbone
   disable_ema: False
   compute_generative_perplexity: False
   perplexity_batch_size: 8

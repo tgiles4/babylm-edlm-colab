@@ -1068,17 +1068,43 @@ class EBM(Diffusion):
     ############################
     # Load diffusion as backbone (use config backbone, or pretrained if specified)
     ############################
+    # Check if we need to load from a checkpoint
+    load_from_ckpt = config.eval.checkpoint_path and config.eval.checkpoint_path != ''
+    is_lightning_ckpt = load_from_ckpt and (
+      config.eval.checkpoint_path.endswith('.ckpt') or
+      config.eval.checkpoint_path.endswith('.pth')
+    )
+
     config_diffusion = copy.deepcopy(config)
     with open_dict(config_diffusion):
       # Only use pretrained model if explicitly requested via checkpoint_path
       # Otherwise, use the backbone specified in config (e.g., 'dit' for small model)
-      if config.eval.checkpoint_path and config.eval.checkpoint_path != '':
-        # User provided a checkpoint path, use it
+      if load_from_ckpt and not is_lightning_ckpt:
+        # User provided a HuggingFace model path, use it
         if config.backbone != 'hf_dit':
           config_diffusion.backbone = 'hf_dit'  # Switch to hf_dit to load from checkpoint
-      # If no checkpoint_path, use the config's backbone (e.g., 'dit' for small model)
+      # If no checkpoint_path or if it's a Lightning checkpoint, use the config's backbone
 
+    # Initialize the Diffusion parent class
     super().__init__(config_diffusion, tokenizer)
+
+    # If loading from Lightning checkpoint, replace the backbone with the loaded one
+    if load_from_ckpt and is_lightning_ckpt:
+      # Load from Lightning checkpoint (.ckpt file)
+      # Create a config for the diffusion model (without energy)
+      config_diffusion_ckpt = copy.deepcopy(config)
+      with open_dict(config_diffusion_ckpt):
+        config_diffusion_ckpt.use_energy = False  # Load as regular diffusion model
+
+      # Load the pretrained diffusion model from checkpoint
+      pretrained_diffusion = Diffusion.load_from_checkpoint(
+        config.eval.checkpoint_path,
+        tokenizer=tokenizer,
+        config=config_diffusion_ckpt,
+        strict=False  # Allow partial loading if there are minor differences
+      )
+      # Replace the backbone with the loaded one
+      self.backbone = pretrained_diffusion.backbone
 
     self.backbone.eval()
     for p in self.backbone.parameters():
