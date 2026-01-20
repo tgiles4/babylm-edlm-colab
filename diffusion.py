@@ -18,26 +18,34 @@ import models
 import noise_schedule
 import utils
 
-# Ensure omegaconf classes are allowlisted for PyTorch 2.6+ weights_only loading
+# Ensure omegaconf and typing classes are allowlisted for PyTorch 2.6+ weights_only loading
 # This needs to be done before any checkpoint loading
 try:
+  import typing
+
   from omegaconf import dictconfig, listconfig
   if hasattr(torch.serialization, 'add_safe_globals'):
-    omegaconf_classes = [
+    safe_classes = [
       dictconfig.DictConfig,
       listconfig.ListConfig,
+      typing.Any,
+      typing.Union,
+      typing.Optional,
+      typing.Dict,
+      typing.List,
+      typing.Tuple,
     ]
     try:
       from omegaconf.base import ContainerMetadata
-      omegaconf_classes.append(ContainerMetadata)
+      safe_classes.append(ContainerMetadata)
     except (ImportError, AttributeError):
       pass
     try:
       from omegaconf.base import Container, Node
-      omegaconf_classes.extend([Container, Node])
+      safe_classes.extend([Container, Node])
     except (ImportError, AttributeError):
       pass
-    torch.serialization.add_safe_globals(omegaconf_classes)
+    torch.serialization.add_safe_globals(safe_classes)
 except (AttributeError, TypeError, ImportError):
   pass
 

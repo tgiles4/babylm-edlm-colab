@@ -14,29 +14,37 @@ import diffusion
 import utils
 
 # Fix for PyTorch 2.6+ weights_only=True default
-# Allowlist omegaconf classes for checkpoint loading
-# This is needed because Lightning checkpoints contain omegaconf objects
+# Allowlist omegaconf and typing classes for checkpoint loading
+# This is needed because Lightning checkpoints contain omegaconf and typing objects
 try:
+  import typing
+
   from omegaconf import dictconfig, listconfig
   if hasattr(torch.serialization, 'add_safe_globals'):
     # Add all omegaconf classes that might be in checkpoints
-    omegaconf_classes = [
+    safe_classes = [
       dictconfig.DictConfig,
       listconfig.ListConfig,
+      typing.Any,
+      typing.Union,
+      typing.Optional,
+      typing.Dict,
+      typing.List,
+      typing.Tuple,
     ]
     # Try to import and add ContainerMetadata (the one mentioned in the error)
     try:
       from omegaconf.base import ContainerMetadata
-      omegaconf_classes.append(ContainerMetadata)
+      safe_classes.append(ContainerMetadata)
     except (ImportError, AttributeError):
       pass
     # Try to add other omegaconf base classes if available
     try:
       from omegaconf.base import Container, Node
-      omegaconf_classes.extend([Container, Node])
+      safe_classes.extend([Container, Node])
     except (ImportError, AttributeError):
       pass
-    torch.serialization.add_safe_globals(omegaconf_classes)
+    torch.serialization.add_safe_globals(safe_classes)
 except (AttributeError, TypeError, ImportError) as e:
   # Fallback for older PyTorch versions or if add_safe_globals doesn't exist
   pass
