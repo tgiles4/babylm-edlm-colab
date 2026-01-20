@@ -18,6 +18,29 @@ import models
 import noise_schedule
 import utils
 
+# Ensure omegaconf classes are allowlisted for PyTorch 2.6+ weights_only loading
+# This needs to be done before any checkpoint loading
+try:
+  from omegaconf import dictconfig, listconfig
+  if hasattr(torch.serialization, 'add_safe_globals'):
+    omegaconf_classes = [
+      dictconfig.DictConfig,
+      listconfig.ListConfig,
+    ]
+    try:
+      from omegaconf.base import ContainerMetadata
+      omegaconf_classes.append(ContainerMetadata)
+    except (ImportError, AttributeError):
+      pass
+    try:
+      from omegaconf.base import Container, Node
+      omegaconf_classes.extend([Container, Node])
+    except (ImportError, AttributeError):
+      pass
+    torch.serialization.add_safe_globals(omegaconf_classes)
+except (AttributeError, TypeError, ImportError):
+  pass
+
 LOG2 = math.log(2)
 
 
