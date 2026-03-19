@@ -1,7 +1,7 @@
 """
-Installation script for Google Colab
-Run this in a Colab cell with: exec(open('install_colab.py').read())
-Or copy-paste the contents into a Colab cell.
+Installation script for Google Colab.
+Run from repo root: exec(open('colab/install_colab.py').read())
+Or in Colab: exec(open('/content/babylm-edlm-colab/colab/install_colab.py').read())
 """
 
 import subprocess
@@ -35,8 +35,11 @@ def main():
     print("Starting Energy-Diffusion-LLM installation for Colab...")
     print(f"Python version: {sys.version}")
 
-    # Get the codebase directory
-    codebase_dir = "/content/Energy-Diffusion-LLM"
+    # Repo root: parent of colab/ (where this script lives)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    codebase_dir = os.path.dirname(script_dir)
+    if not os.path.exists(os.path.join(codebase_dir, "requirements.txt")):
+        codebase_dir = "/content/babylm-edlm-colab"  # fallback for Colab
     if not os.path.exists(codebase_dir):
         print(f"\n⚠ Warning: Codebase directory not found at {codebase_dir}")
         print("Please make sure you've uploaded and extracted the codebase.")
@@ -169,8 +172,7 @@ def main():
     print("\nNext steps:")
     print("1. Mount Google Drive: from google.colab import drive; drive.mount('/content/drive')")
     print("2. Verify tokenizer is in Google Drive")
-    print("3. Start training: python main.py data=babylm noise=cosine")
+    print("3. Start training with Colab overrides (see colab/COLAB.md)")
 
 if __name__ == "__main__":
     main()
-

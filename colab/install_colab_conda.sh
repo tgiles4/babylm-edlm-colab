@@ -1,8 +1,13 @@
 #!/bin/bash
-# Conda installation script for Google Colab
-# Run this in a Colab cell with: !bash install_colab_conda.sh
+# Conda installation script for Google Colab (run from repo root: bash colab/install_colab_conda.sh)
+# Run this in a Colab cell with: !cd /content/babylm-edlm-colab && bash colab/install_colab_conda.sh
 
 set -e
+
+# Ensure we run from repo root (parent of colab/)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+cd "$REPO_ROOT"
 
 echo "Installing Miniconda and setting up environment from requirements.yaml..."
 
@@ -22,7 +27,7 @@ source ~/.bashrc
 # Step 2: Create environment from requirements.yaml
 echo ""
 echo "Step 2: Creating conda environment from requirements.yaml..."
-cd /content/Energy-Diffusion-LLM
+# REPO_ROOT already set above
 
 # Note: We'll modify the approach since Colab already has PyTorch/CUDA
 # Option A: Create environment but don't install PyTorch (use Colab's)
@@ -52,9 +57,3 @@ echo "  sys.path.insert(0, '/usr/local/miniconda/envs/edlm/lib/python3.9/site-pa
 echo ""
 echo "Or restart the runtime and activate:"
 echo "  !conda activate edlm"
-
-
-
-
-
-

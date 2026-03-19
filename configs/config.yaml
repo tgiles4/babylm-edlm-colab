@@ -7,6 +7,10 @@ defaults:
   - /noise: loglinear
   - /lr_scheduler: constant_warmup
 
+# Hopper default: base dir for data, tokenizer, checkpoints, outputs (uses $SCRATCH when set).
+# Colab: override with e.g. project_dir=/content/drive/MyDrive/babylm-edlm
+project_dir: ${oc.env:SCRATCH,./scratch}/babylm-edlm
+
 mode: train  # train / ppl_eval / sample_eval
 diffusion: absorbing_state
 backbone: dit  # dit / dimamba / ar : backbone for Diffusion
@@ -56,7 +60,7 @@ training:
 
 eval:
   # Path to checkpoint for evaluation or to load pretrained diffusion model as EBM backbone
-  # For Lightning checkpoints (.ckpt files): provide full path, e.g., '/content/drive/MyDrive/path/to/model.ckpt'
+  # For Lightning checkpoints (.ckpt files): provide full path (e.g. Hopper: ${project_dir}/checkpoints/.../model.ckpt; Colab: /content/drive/MyDrive/.../model.ckpt)
   # For HuggingFace models: provide model name or path
   # When training EBM (use_energy=True), this loads the diffusion model as the frozen backbone
   checkpoint_path: ''  # Used to evaluate a checkpoint after training, or to load pretrained diffusion as EBM backbone
@@ -103,23 +107,20 @@ wandb:
     - ${data.valid}
     - ${dataset_size}
     - ${use_energy}
-  # Colab-specific settings
-  save_dir: /content/drive/MyDrive/babylm-edlm/wandb  # Save wandb logs to Google Drive
+  # Hopper default: wandb logs under project_dir. Colab: override save_dir=/content/drive/MyDrive/babylm-edlm/wandb
+  save_dir: ${project_dir}/wandb
   offline: false  # Set to true if you want offline mode (sync later)
 
 hydra:
   run:
-    # Save outputs to Google Drive for Colab persistence
-    # Override with: python main.py hydra.run.dir=/content/drive/MyDrive/babylm-edlm/outputs/...
-    dir: /content/drive/MyDrive/babylm-edlm/outputs/${data.train}/${dataset_size}/${use_energy}/${now:%Y.%m.%d}/${now:%H%M%S}
+    # Hopper default: outputs under project_dir. Colab: override hydra.run.dir=/content/drive/MyDrive/babylm-edlm/outputs/...
+    dir: ${project_dir}/outputs/${data.train}/${dataset_size}/${use_energy}/${now:%Y.%m.%d}/${now:%H%M%S}
   job:
     chdir: true
 
 checkpointing:
-  # Save checkpoints to Google Drive for Colab persistence
-  # Each experiment run gets its own unique checkpoint directory
-  # Override with: python main.py checkpointing.save_dir=/content/drive/MyDrive/babylm-edlm/checkpoints
-  save_dir: /content/drive/MyDrive/babylm-edlm/checkpoints/${data.train}/${dataset_size}/${use_energy}/${now:%Y.%m.%d}/${now:%H%M%S}
+  # Hopper default: checkpoints under project_dir. Colab: override checkpointing.save_dir=/content/drive/MyDrive/babylm-edlm/checkpoints
+  save_dir: ${project_dir}/checkpoints/${data.train}/${dataset_size}/${use_energy}/${now:%Y.%m.%d}/${now:%H%M%S}
   # Note: `checkpoints` subdirectory is added by the callback dirpath
   resume_from_ckpt: false  # Set to true to resume from a specific checkpoint
   resume_ckpt_path: ${.save_dir}/checkpoints/last.ckpt

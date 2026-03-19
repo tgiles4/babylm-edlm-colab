@@ -1,24 +1,24 @@
 """
 Train a BPE tokenizer from BabyLM dataset files.
 
-Usage:
-    python train_tokenizer.py \
-        --data_dir /data/train_10M \
-        --output_path /content/drive/MyDrive/babylm-edlm/tokenizer.json \
-        --vocab_size 32000
+10M and 100M use separate tokenizers (tokenizer_10M.json vs tokenizer_100M.json);
+they are not interchangeable.
 
-Or in Colab:
-    !python train_tokenizer.py --data_dir /data/train_10M --output_path /content/drive/MyDrive/babylm-edlm/tokenizer.json
+Default paths are project_dir/data/train_{size} and project_dir/tokenizer/tokenizer_{size}.json.
+  - Hopper: set --project_dir in your sbatch script (e.g. $SCRATCH/babylm-edlm).
+  - Colab/custom: pass --project_dir and optionally --data_dir/--output_path (see colab/COLAB.md).
 """
 
 import argparse
 import glob
 import os
-from pathlib import Path
 
 from tokenizers import Tokenizer, models, pre_tokenizers, processors, trainers
 from tokenizers.normalizers import NFD, Lowercase, Sequence, StripAccents
 from transformers import PreTrainedTokenizerFast
+
+BABYLM_SIZES = ('10M', '100M')
+DEFAULT_SIZE = '10M'
 
 
 def train_bpe_tokenizer(
@@ -41,19 +41,11 @@ def train_bpe_tokenizer(
     Returns:
         PreTrainedTokenizerFast: The trained tokenizer
     """
-    print(f"Training BPE tokenizer on data from: {data_dir}")
-    print(f"Output path: {output_path}")
-    print(f"Vocabulary size: {vocab_size}")
-
     # Find all .train files
     train_files = glob.glob(os.path.join(data_dir, '*.train'))
     if not train_files:
         raise ValueError(
             f'No .train files found in directory: {data_dir}')
-
-    print(f"\nFound {len(train_files)} .train files:")
-    for f in sorted(train_files):
-        print(f"  - {os.path.basename(f)}")
 
     # Initialize tokenizer
     tokenizer = Tokenizer(models.BPE())
@@ -82,9 +74,6 @@ def train_bpe_tokenizer(
     )
 
     # Train tokenizer on all .train files
-    print(f"\nTraining tokenizer on {len(train_files)} files...")
-    print("This may take a few minutes...")
-
     files = sorted(train_files)
     tokenizer.train(files, trainer=trainer)
 
@@ -100,20 +89,15 @@ def train_bpe_tokenizer(
     # Handle output path - if it's a directory, append tokenizer.json
     if os.path.isdir(output_path) or output_path.endswith('/'):
         output_path = os.path.join(output_path.rstrip('/'), 'tokenizer.json')
-        print(f"Output path is a directory, saving to: {output_path}")
     elif not output_path.endswith('.json'):
-        # If no extension, assume it should be .json
         output_path = output_path + '.json'
-        print(f"Adding .json extension, saving to: {output_path}")
 
     # Save tokenizer
     output_dir = os.path.dirname(output_path)
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
-        print(f"Created output directory: {output_dir}")
 
     tokenizer.save(output_path)
-    print(f"\n✓ Tokenizer saved to: {output_path}")
 
     # Wrap in PreTrainedTokenizerFast for compatibility
     wrapped_tokenizer = PreTrainedTokenizerFast(
@@ -127,41 +111,34 @@ def train_bpe_tokenizer(
         eos_token="[SEP]",  # Use [SEP] as EOS
     )
 
-    # Print tokenizer info
-    print(f"\nTokenizer Info:")
-    print(f"  Vocab size: {wrapped_tokenizer.vocab_size}")
-    print(f"  Special tokens:")
-    print(f"    PAD: {wrapped_tokenizer.pad_token} (ID: {wrapped_tokenizer.pad_token_id})")
-    print(f"    UNK: {wrapped_tokenizer.unk_token} (ID: {wrapped_tokenizer.unk_token_id})")
-    print(f"    CLS/BOS: {wrapped_tokenizer.cls_token} (ID: {wrapped_tokenizer.cls_token_id})")
-    print(f"    SEP/EOS: {wrapped_tokenizer.sep_token} (ID: {wrapped_tokenizer.sep_token_id})")
-    print(f"    MASK: {wrapped_tokenizer.mask_token} (ID: {wrapped_tokenizer.mask_token_id})")
-
-    # Test tokenizer
-    print(f"\nTesting tokenizer:")
-    test_text = "This is a test sentence for the tokenizer."
-    tokens = wrapped_tokenizer.encode(test_text)
-    decoded = wrapped_tokenizer.decode(tokens)
-    print(f"  Input: {test_text}")
-    print(f"  Tokens: {tokens}")
-    print(f"  Decoded: {decoded}")
-
     return wrapped_tokenizer
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Train a BPE tokenizer from BabyLM dataset files')
+        description='Train a BPE tokenizer from BabyLM dataset files. '
+        '10M and 100M use separate tokenizers (tokenizer_10M.json vs tokenizer_100M.json).')
+    parser.add_argument(
+        '--project_dir',
+        type=str,
+        default=None,
+        help='Project base dir; data_dir and output_path default to project_dir/data/train_{size} and project_dir/tokenizer/tokenizer_{size}.json. Default: $SCRATCH/babylm-edlm or ./scratch/babylm-edlm')
     parser.add_argument(
         '--data_dir',
         type=str,
-        required=True,
-        help='Directory containing .train files (e.g., /data/train_10M)')
+        default=None,
+        help='Directory containing .train files (default: project_dir/data/train_{size})')
     parser.add_argument(
         '--output_path',
         type=str,
-        required=True,
-        help='Path to save tokenizer.json (e.g., /content/drive/MyDrive/babylm-edlm/tokenizer.json)')
+        default=None,
+        help='Path to save tokenizer JSON (default: project_dir/tokenizer/tokenizer_{size}.json)')
+    parser.add_argument(
+        '--size',
+        type=str,
+        choices=BABYLM_SIZES,
+        default=DEFAULT_SIZE,
+        help=f'Dataset size for default paths (default: {DEFAULT_SIZE})')
     parser.add_argument(
         '--vocab_size',
         type=int,
@@ -175,26 +152,34 @@ def main():
 
     args = parser.parse_args()
 
+    expand = lambda p: os.path.expandvars(os.path.expanduser(p)) if p else p
+
+    project_dir = args.project_dir
+    if project_dir is None:
+        base = os.environ.get('SCRATCH') or os.path.abspath('./scratch')
+        project_dir = os.path.join(base, 'babylm-edlm')
+    project_dir = expand(project_dir)
+
+    if args.data_dir is None:
+        args.data_dir = os.path.join(project_dir, 'data', f'train_{args.size}')
+    if args.output_path is None:
+        args.output_path = os.path.join(project_dir, 'tokenizer', f'tokenizer_{args.size}.json')
+
+    args.data_dir = expand(args.data_dir)
+    args.output_path = expand(args.output_path)
+
     # Validate paths
     if not os.path.exists(args.data_dir):
         raise FileNotFoundError(
-            f'Data directory not found: {args.data_dir}')
+            f'Data directory not found: {args.data_dir}\n'
+            f'Ensure BabyLM .train files are in that directory, or run with data=babylm first so the dataloader can auto-download (see BABYLM_DOWNLOAD_PLAN).')
 
-    # Train tokenizer
-    tokenizer = train_bpe_tokenizer(
+    train_bpe_tokenizer(
         data_dir=args.data_dir,
         output_path=args.output_path,
         vocab_size=args.vocab_size,
         min_frequency=args.min_frequency
     )
-
-    print(f"\n{'='*60}")
-    print("Tokenizer training complete!")
-    print(f"{'='*60}")
-    print(f"\nNext steps:")
-    print(f"1. Verify tokenizer exists at: {args.output_path}")
-    print(f"2. Update configs/data/babylm.yaml if needed")
-    print(f"3. Start training: python main.py data=babylm noise=cosine")
 
 
 if __name__ == '__main__':

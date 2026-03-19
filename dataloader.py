@@ -5,6 +5,7 @@ import math
 import os
 import re
 import shutil
+import time
 import typing
 import urllib
 import zipfile
@@ -183,7 +184,9 @@ def get_babylm_dataset(data_dir, cache_dir=None):
   Load BabyLM dataset from .train files in a directory.
 
   Reads all .train files from the specified directory, combines them,
-  and splits into 90% train / 10% validation.
+  and splits into 90% train / 10% validation. If cache_dir is set,
+  the raw combined+split DatasetDict is cached to avoid re-reading
+  .train files; only one process builds the cache (single-writer lock).
 
   Args:
     data_dir: Path to directory containing .train files (e.g., /data/train_10M)
@@ -194,11 +197,41 @@ def get_babylm_dataset(data_dir, cache_dir=None):
   """
   import glob
 
+  cache_subdir = 'babylm_raw'
+  data_dir_basename = os.path.basename(os.path.normpath(data_dir))
+  cache_path = os.path.join(cache_dir, cache_subdir, data_dir_basename) if cache_dir else None
+  if cache_path and utils.fsspec_exists(cache_path):
+    LOGGER.info(f'Loading BabyLM raw dataset from cache: {cache_path}')
+    return datasets.load_from_disk(cache_path)
+
   # Find all .train files in the directory
   train_files = glob.glob(os.path.join(data_dir, '*.train'))
   if not train_files:
     raise ValueError(
       f'No .train files found in directory: {data_dir}')
+
+  builder = False
+  lock_path = (cache_path + '.lock') if cache_path else None
+  if cache_path:
+    os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+    try:
+      open(lock_path, 'x').close()
+      builder = True
+    except FileExistsError:
+      cache_ready_timeout = 3600
+      deadline = time.monotonic() + cache_ready_timeout
+      LOGGER.info(f'Waiting for BabyLM raw cache at {cache_path}...')
+      while not utils.fsspec_exists(cache_path):
+        if time.monotonic() > deadline:
+          try:
+            os.remove(lock_path)
+          except OSError:
+            pass
+          raise TimeoutError(
+            f'BabyLM raw cache at {cache_path} did not appear within {cache_ready_timeout}s.')
+        time.sleep(2)
+      LOGGER.info(f'Loading BabyLM raw dataset from cache: {cache_path}')
+      return datasets.load_from_disk(cache_path)
 
   LOGGER.info(f'Found {len(train_files)} .train files in {data_dir}')
   LOGGER.info(f'Files: {[os.path.basename(f) for f in train_files]}')
@@ -232,6 +265,16 @@ def get_babylm_dataset(data_dir, cache_dir=None):
   LOGGER.info(
     f'Split dataset: {len(dataset_dict["train"])} train, '
     f'{len(dataset_dict["validation"])} validation')
+
+  if cache_path and builder:
+    try:
+      dataset_dict.save_to_disk(cache_path)
+      LOGGER.info(f'Saved BabyLM raw dataset to cache: {cache_path}')
+    finally:
+      try:
+        os.remove(lock_path)
+      except OSError:
+        pass
 
   return dataset_dict
 
@@ -371,8 +414,33 @@ def get_dataset(
   if utils.fsspec_exists(_path):
     LOGGER.info(f'Loading data from: {_path}')
     return datasets.load_from_disk(_path).with_format('torch')
-  LOGGER.info(f'Generating new data at: {_path}')
 
+  # Multi-GPU: only one process builds the cache; others wait and then load.
+  lock_path = _path + '.lock'
+  cache_ready_timeout = 3600
+  builder = False
+  try:
+    os.makedirs(os.path.dirname(lock_path), exist_ok=True)
+    open(lock_path, 'x').close()
+    builder = True
+  except FileExistsError:
+    LOGGER.info(f'Waiting for cache at {_path} (another process is building)...')
+    deadline = time.monotonic() + cache_ready_timeout
+    while not utils.fsspec_exists(_path):
+      if time.monotonic() > deadline:
+        try:
+          os.remove(lock_path)
+        except OSError:
+          pass
+        raise TimeoutError(
+          f'Cache at {_path} did not appear within {cache_ready_timeout}s. '
+          'Remove the .lock file if a previous build failed.')
+      time.sleep(2)
+    LOGGER.info(f'Loading data from: {_path}')
+    return datasets.load_from_disk(_path).with_format('torch')
+
+  assert builder
+  LOGGER.info(f'Generating new data at: {_path}')
   crop_train = dataset_name == 'text8-crop'
   if mode == 'train' and crop_train:
     # double block size for sub-sampling
@@ -533,6 +601,10 @@ def get_dataset(
 
   if not wrap:
     tokenized_dataset.save_to_disk(_path)
+    try:
+      os.remove(lock_path)
+    except OSError:
+      pass
     return tokenized_dataset.with_format('torch')
 
   group_texts = functools.partial(
@@ -550,6 +622,10 @@ def get_dataset(
       load_from_cache_file=True,
       desc='Grouping')
     chunked_dataset.save_to_disk(_path)
+  try:
+    os.remove(lock_path)
+  except OSError:
+    pass
   chunked_dataset = chunked_dataset.with_format('torch')
   return chunked_dataset
 
@@ -572,13 +648,13 @@ def get_tokenizer(config):
           f'Tokenizer file not found: {tokenizer_path}\n'
           f'\n'
           f'Since you are training from scratch, you need to create a tokenizer first.\n'
-          f'Run the tokenizer training script:\n'
-          f'  python train_tokenizer.py \\\n'
-          f'    --data_dir /data/train_10M \\\n'
-          f'    --output_path {tokenizer_path} \\\n'
-          f'    --vocab_size 32000\n'
+          f'Run the tokenizer training script (match dataset_size, e.g. 10M or 100M):\n'
+          f'  python train_tokenizer.py --project_dir /path/to/project --size 10M\n'
+          f'Or on a cluster: sbatch scripts/job_train_tokenizer_10m.slurm\n'
+          f'  (for 100M: scripts/job_train_tokenizer_100m.slurm)\n'
           f'\n'
-          f'This will train a BPE tokenizer on your BabyLM dataset and save it to the specified path.')
+          f'This writes tokenizer to project_dir/tokenizer/tokenizer_<size>.json using\n'
+          f'data from project_dir/data/train_<size>/*.train')
       LOGGER.info(f'Loading tokenizer from JSON file: {tokenizer_path}')
       try:
         # Load using tokenizers library
@@ -650,13 +726,13 @@ def get_tokenizer(config):
           f'HuggingFace error: {e}\n'
           f'\n'
           f'Since you are training from scratch, you need to create a tokenizer first.\n'
-          f'Run the tokenizer training script:\n'
-          f'  python train_tokenizer.py \\\n'
-          f'    --data_dir /data/train_10M \\\n'
-          f'    --output_path {tokenizer_path} \\\n'
-          f'    --vocab_size 32000\n'
+          f'Run the tokenizer training script (match dataset_size, e.g. 10M or 100M):\n'
+          f'  python train_tokenizer.py --project_dir /path/to/project --size 10M\n'
+          f'Or on a cluster: sbatch scripts/job_train_tokenizer_10m.slurm\n'
+          f'  (for 100M: scripts/job_train_tokenizer_100m.slurm)\n'
           f'\n'
-          f'This will train a BPE tokenizer on your BabyLM dataset and save it to the specified path.')
+          f'This writes tokenizer to project_dir/tokenizer/tokenizer_<size>.json using\n'
+          f'data from project_dir/data/train_<size>/*.train')
 
   if (isinstance(tokenizer, transformers.GPT2TokenizerFast)
       or isinstance(tokenizer, transformers.GPT2Tokenizer)):

@@ -1,14 +1,18 @@
+# Train tokenizer first: run scripts/job_train_tokenizer_10m.slurm or job_train_tokenizer_100m.slurm
+# (or: python train_tokenizer.py --project_dir /path/to/project --size 10M). This creates
+# project_dir/tokenizer/tokenizer_<size>.json and expects project_dir/data/train_<size>/*.train.
 train: babylm
 valid: babylm  # Uses same data, automatically split 90/10 for train/validation
-tokenizer_name_or_path: /content/drive/MyDrive/babylm-edlm/tokenizer/tokenizer.json  # Path to your tokenizer
-cache_dir: /content/drive/MyDrive/babylm-edlm/cache  # Directory for caching tokenized datasets
-data_dir: /content/drive/MyDrive/babylm-edlm/data/train_10M  # Directory containing .train files (change to train_100M for 100M token dataset)
+# Hopper defaults (project_dir = $SCRATCH/babylm-edlm when SCRATCH is set). Colab: override with full Drive paths.
+# Tokenizer and data_dir are size-specific: 10M and 100M use separate tokenizers (tokenizer_10M.json vs tokenizer_100M.json).
+tokenizer_name_or_path: ${project_dir}/tokenizer/tokenizer_${dataset_size}.json
+cache_dir: ${project_dir}/cache
+data_dir: ${project_dir}/data/train_${dataset_size}  # train_10M or train_100M; must match tokenizer size
 wrap: True
 streaming: False
 
 # Usage examples:
-# For 10M tokens: python main.py data=babylm
-# For 100M tokens: python main.py data=babylm data.data_dir=/content/drive/MyDrive/babylm-edlm/data/train_100M
-# To override tokenizer path: python main.py data.tokenizer_name_or_path=/path/to/tokenizer.json
-# To override data directory: python main.py data.data_dir=/path/to/train_10M
+# For 10M: python main.py data=babylm  (dataset_size=10M default in config.yaml)
+# For 100M: python main.py data=babylm dataset_size=100M  (uses tokenizer_100M.json and data/train_100M)
+# Colab overrides: data.tokenizer_name_or_path=/path/to/tokenizer_10M.json data.data_dir=/path/to/data/train_10M data.cache_dir=...
 

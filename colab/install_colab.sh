@@ -1,8 +1,13 @@
 #!/bin/bash
-# Installation script for Google Colab
-# Run this in a Colab cell with: !bash install_colab.sh
+# Installation script for Google Colab (run from repo root: bash colab/install_colab.sh)
+# Run this in a Colab cell with: !cd /content/babylm-edlm-colab && bash colab/install_colab.sh
 
 set -e
+
+# Ensure we run from repo root (parent of colab/)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+cd "$REPO_ROOT"
 
 echo "Installing Energy-Diffusion-LLM dependencies for Colab..."
 
@@ -81,4 +86,3 @@ except ImportError as e:
 
 echo ""
 echo "Installation complete!"
-

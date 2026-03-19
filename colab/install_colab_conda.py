@@ -1,6 +1,7 @@
 """
-Conda installation script for Google Colab
-Run this in a Colab cell with: exec(open('install_colab_conda.py').read())
+Conda installation script for Google Colab.
+Run from repo root: exec(open('colab/install_colab_conda.py').read())
+Or in Colab: exec(open('/content/babylm-edlm-colab/colab/install_colab_conda.py').read())
 """
 
 import os
@@ -65,8 +66,11 @@ def main():
         print("✓ Conda already installed")
         os.environ['PATH'] = '/usr/local/miniconda/bin:' + os.environ.get('PATH', '')
 
-    # Get codebase directory
-    codebase_dir = "/content/Energy-Diffusion-LLM"
+    # Repo root: parent of colab/ (where this script lives)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    codebase_dir = os.path.dirname(script_dir)
+    if not os.path.exists(os.path.join(codebase_dir, "requirements.yaml")):
+        codebase_dir = "/content/babylm-edlm-colab"  # fallback for Colab
     if not os.path.exists(codebase_dir):
         print(f"\n⚠ Warning: Codebase directory not found at {codebase_dir}")
         return
@@ -140,9 +144,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
