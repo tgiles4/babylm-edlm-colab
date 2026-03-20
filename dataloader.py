@@ -576,8 +576,8 @@ def get_dataset(
       return text
     return detok
 
-  EOS = tokenizer.encode(tokenizer.eos_token)[0]
-  BOS = tokenizer.encode(tokenizer.bos_token)[0]
+  EOS = tokenizer.eos_token_id
+  BOS = tokenizer.bos_token_id
 
   def preprocess_and_tokenize(example):
     if dataset_name == 'ptb':

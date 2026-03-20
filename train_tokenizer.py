@@ -16,7 +16,7 @@ import argparse
 import glob
 import os
 
-from tokenizers import Tokenizer, models, pre_tokenizers, processors, trainers
+from tokenizers import Tokenizer, models, pre_tokenizers, trainers
 from tokenizers.normalizers import NFD, Lowercase, Sequence, StripAccents
 from transformers import PreTrainedTokenizerFast
 
@@ -72,8 +72,6 @@ def train_bpe_tokenizer(
             "[CLS]",
             "[SEP]",
             "[MASK]",
-            "[BOS]",
-            "[EOS]"
         ],
         show_progress=show_progress
     )
@@ -82,13 +80,6 @@ def train_bpe_tokenizer(
     files = sorted(train_files)
     tokenizer.train(files, trainer=trainer)
 
-    # Set up post-processor (add [BOS] and [EOS] tokens)
-    tokenizer.post_processor = processors.BertProcessing(
-        ("[SEP]", tokenizer.token_to_id("[SEP]")),
-        ("[CLS]", tokenizer.token_to_id("[CLS]"))
-    )
-
-    # Set UNK token
     tokenizer.unk_token = "[UNK]"
 
     # Handle output path - if it's a directory, append tokenizer.json
