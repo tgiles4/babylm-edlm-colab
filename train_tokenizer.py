@@ -186,12 +186,40 @@ def main():
             f'Data directory not found: {args.data_dir}\n'
             'See agent-tasks/BABYLM_2026_HF_DOWNLOAD_PLAN.md')
 
-    train_bpe_tokenizer(
+    tokenizer = train_bpe_tokenizer(
         data_dir=args.data_dir,
         output_path=args.output_path,
         vocab_size=args.vocab_size,
         min_frequency=args.min_frequency
     )
+
+    # --- Token counts per dataset file ---
+    train_files = sorted(glob.glob(os.path.join(args.data_dir, '*.train')))
+    raw_tok = tokenizer.backend_tokenizer
+    total_tokens = 0
+    for f in train_files:
+        file_tokens = 0
+        with open(f, 'r', encoding='utf-8') as fh:
+            for line in fh:
+                file_tokens += len(raw_tok.encode(line).ids)
+        total_tokens += file_tokens
+        print(f"{os.path.basename(f)}: {file_tokens:,} tokens", flush=True)
+    print(f"Total: {total_tokens:,} tokens\n", flush=True)
+
+    # --- Sample tokenizations ---
+    def test(text):
+        return ' '.join(raw_tok.encode(text).tokens)
+
+    texts = [
+        """One of the most impressive long term hobby projects is Robert's Rocket Project. He started building a 100 lbf liquid engine in 2001, fired a regeneratively cooled version in 2007, started building a regen 250 lbf in 2008.""",
+        """what are examples of interfaces that allow you to manage sets of queries (SQL, splunk, lucene/elastic, xpath, whatever other language)?""",
+        """### Increasingly seeing a big schism between what I think my research is & what others think it is. I don't do qualitative work and I'm not trained in anthro or theories of race or gender. I can't supervise students with these interests! I'm a sociophonetician who works on prosody!""",
+        """The Northern Lights season is here... Taking these pictures is an art itself and requires preparation, so The Local spoke to an expert to find out how to take awe-inspiring snaps of the Northern Lights.""",
+        """Some people have SOTA facial recognition abilities: "At the very upper end of the performance scale, a cohort of just 1-2% of the population are 'super-recognisers'-people who can memorise and recall unfamiliar faces, even after the briefest glimpse.\"""",
+    ]
+
+    for text in texts:
+        print(f"INPUT:  {text}\nTOKENS: {test(text)}\n", flush=True)
 
 
 if __name__ == '__main__':

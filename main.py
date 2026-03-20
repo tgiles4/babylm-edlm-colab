@@ -58,6 +58,17 @@ omegaconf.OmegaConf.register_new_resolver(
 omegaconf.OmegaConf.register_new_resolver(
   'div_up', lambda x, y: (x + y - 1) // y)
 
+def _parse_size(s):
+  s = str(s).strip().upper()
+  multipliers = {'K': 1_000, 'M': 1_000_000, 'B': 1_000_000_000}
+  for suffix, mult in multipliers.items():
+    if s.endswith(suffix):
+      return int(float(s[:-1]) * mult)
+  return int(s)
+
+omegaconf.OmegaConf.register_new_resolver(
+  'parse_size', _parse_size)
+
 
 def _load_from_checkpoint(config, tokenizer):
   # Try to determine model type from checkpoint or config

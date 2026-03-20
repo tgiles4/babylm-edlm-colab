@@ -1,7 +1,7 @@
 #!/bin/bash
 # BabyLM MDLM only (no energy): DIT diffusion training on Hopper (2× A100 80GB).
-# BabyLM rules: train for 10 epochs only. This script uses the full 10 epochs; the EBM script
-# then chooses which checkpoint from this run to load as backbone (early, mid, or final).
+# BabyLM rules: 10 epoch total budget. This script trains the backbone for 7 epochs,
+# leaving 3 epochs for the energy NCE model (job_train_babylm_energy_hopper.slurm).
 # Paths use $SCRATCH/babylm-edlm (see configs and HOPPER_SETUP.md).
 # Submit from repo root: sbatch scripts/job_train_babylm_hopper.slurm
 # For EBM (with energy) use job_train_babylm_energy_hopper.slurm and set BABYLM_CKPT to desired checkpoint.
@@ -48,8 +48,9 @@ if [ -f "${HOME}/.wandb_api_key" ]; then
 fi
 
 # DDP: srun + loader.num_workers=0 (same pattern as job_train_babylm_energy_hopper.slurm).
-# Gradient accumulation: train microbatch 128/GPU × 2 accum × 2 GPUs = global 512 (256/GPU with no accum OOM'd).
-# Val: 128/GPU (forward-only but matches safer per-device memory).
+# trainer.max_steps & lr_scheduler.warmup_t are now auto-computed from
+# dataset_size, model.length, global_batch_size, and max_epochs (see config.yaml).
+# Leave some epochs for the energy NCE model (10 epoch total budget).
 srun --ntasks=2 --ntasks-per-node=2 --export=ALL "$ENV/bin/python" -u -m main \
   ++path=${path} \
   use_energy=False \
@@ -57,17 +58,16 @@ srun --ntasks=2 --ntasks-per-node=2 --export=ALL "$ENV/bin/python" -u -m main \
   model=small \
   model.length=512 \
   dataset_size=100M \
-  loader.global_batch_size=464 \
-  loader.batch_size=116 \
-  loader.eval_batch_size=116 \
+  loader.global_batch_size=128 \
+  loader.batch_size=64 \
+  loader.eval_batch_size=64 \
   loader.num_workers=0 \
   trainer.max_epochs=10 \
   trainer.val_check_interval=1.0 \
   trainer.gradient_clip_val=2.0 \
-  optim.lr=0.001 \
+  optim.lr=7e-3 \
   optim.weight_decay=0.01 \
   lr_scheduler=cosine_decay_warmup \
-  lr_scheduler.warmup_t=3500 \
   wandb.id=null \
   wandb.group=babylm_mdlm \
   wandb.name=babylm_100M

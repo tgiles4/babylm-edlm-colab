@@ -88,7 +88,9 @@ trainer:
   precision: 'bf16'
   num_sanity_val_steps: 2
   max_epochs: 10  # Limit training to 10 epochs (training stops when either max_epochs or max_steps is reached)
-  max_steps: 1_000_000
+  # Computed from dataset: ceil(tokens / seq_len / global_batch) * epochs.
+  # Keeps the LR scheduler in sync with the actual training duration.
+  max_steps: ${eval:"(${parse_size:${dataset_size}} // ${model.length} + ${loader.global_batch_size} - 1) // ${loader.global_batch_size} * ${trainer.max_epochs}"}
   log_every_n_steps: 10
   limit_train_batches: 1.0   # train on full dataset, can be used to toggle quick run
   limit_val_batches: 1.0     # validate on full dataset, can be used to toggle quick run
