@@ -65,7 +65,6 @@ srun --ntasks=2 --ntasks-per-node=2 --export=ALL "$ENV/bin/python" -u -m main \
   model=small \
   model.length=256 \
   dataset_size=100M \
-  noise=cosine \
   eval.checkpoint_path=${BABYLM_CKPT} \
   ebm_backbone=dit \
   loader.global_batch_size=512 \
