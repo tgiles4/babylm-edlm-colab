@@ -48,6 +48,8 @@ if [ -f "${HOME}/.wandb_api_key" ]; then
 fi
 
 # DDP: srun + loader.num_workers=0 (same pattern as job_train_babylm_energy_hopper.slurm).
+# Gradient accumulation: train microbatch 128/GPU × 2 accum × 2 GPUs = global 512 (256/GPU with no accum OOM'd).
+# Val: 128/GPU (forward-only but matches safer per-device memory).
 srun --ntasks=2 --ntasks-per-node=2 --export=ALL "$ENV/bin/python" -u -m main \
   ++path=${path} \
   use_energy=False \
@@ -56,6 +58,8 @@ srun --ntasks=2 --ntasks-per-node=2 --export=ALL "$ENV/bin/python" -u -m main \
   model.length=256 \
   dataset_size=100M \
   loader.global_batch_size=512 \
+  loader.batch_size=128 \
+  loader.eval_batch_size=128 \
   loader.num_workers=0 \
   trainer.max_epochs=10 \
   trainer.val_check_interval=1.0 \
