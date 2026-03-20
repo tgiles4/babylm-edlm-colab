@@ -58,9 +58,9 @@ srun --ntasks=2 --ntasks-per-node=2 --export=ALL "$ENV/bin/python" -u -m main \
   model=small \
   model.length=512 \
   dataset_size=100M \
-  loader.global_batch_size=128 \
-  loader.batch_size=64 \
-  loader.eval_batch_size=64 \
+  loader.global_batch_size=512 \
+  loader.batch_size=128 \
+  loader.eval_batch_size=128 \
   loader.num_workers=0 \
   trainer.max_epochs=10 \
   trainer.val_check_interval=1.0 \
