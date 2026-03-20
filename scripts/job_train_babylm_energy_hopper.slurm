@@ -36,10 +36,10 @@ fi
 mkdir -p ${path}
 cd ${path}
 
-if [ ! -d "Energy-Diffusion-LLM" ]; then
-  git clone https://github.com/tgiles4/Energy-Diffusion-LLM.git
+if [ ! -d "babylm-edlm-colab" ]; then
+  git clone git@github.com:tgiles4/babylm-edlm-colab.git
 fi
-cd Energy-Diffusion-LLM
+cd babylm-edlm-colab
 
 # Load modules
 module load hosts/hopper
