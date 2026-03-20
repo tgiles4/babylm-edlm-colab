@@ -1,5 +1,5 @@
 #!/bin/bash
-# BabyLM MDLM only (no energy): DIT diffusion training on Hopper (1× A100 80GB).
+# BabyLM MDLM only (no energy): DIT diffusion training on Hopper (2× A100 80GB).
 # BabyLM rules: train for 10 epochs only. This script uses the full 10 epochs; the EBM script
 # then chooses which checkpoint from this run to load as backbone (early, mid, or final).
 # Paths use $SCRATCH/babylm-edlm (see configs and HOPPER_SETUP.md).
@@ -8,7 +8,7 @@
 #SBATCH --job-name=babylm_mdlm
 #SBATCH --qos=gpu
 #SBATCH --partition=contrib-gpuq
-#SBATCH --gres=gpu:A100.80gb:1
+#SBATCH --gres=gpu:A100.80gb:2
 
 #SBATCH --output=babylm_mdlm-%j.out
 #SBATCH --error=babylm_mdlm-%j.err
@@ -16,38 +16,24 @@
 #SBATCH --constraint=amd
 
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
+# Must match gres GPU count for DDP.
+#SBATCH --ntasks-per-node=2
 
 #SBATCH --mem=64G
 #SBATCH --time=3-00:00:00
 
-# Clone repo and set working directory (same pattern as scripts/job_text8_mdlm_4gpu.slurm).
-# BASH_SOURCE-based cd is unreliable under sbatch; use $SCRATCH/edlm like the other Hopper jobs.
-# Optional: sbatch --export=NONE,EDLM_BRANCH=my-feature to run code from that remote branch.
+# Clone repo and set up environment (run on compute node). With --export=NONE, set SCRATCH if needed.
 export SCRATCH="${SCRATCH:-/scratch/$(id -un)}"
 export path=${SCRATCH}/edlm
 mkdir -p ${path}
 cd ${path}
 
-EDLM_REPO="${EDLM_REPO:-https://github.com/tgiles4/babylm-edlm-colab.git}"
-EDLM_DIR="${EDLM_DIR:-babylm-edlm-colab}"
-
-if [ ! -d "${EDLM_DIR}" ]; then
-  if [ -n "${EDLM_BRANCH:-}" ]; then
-    git clone -b "${EDLM_BRANCH}" "${EDLM_REPO}" "${EDLM_DIR}"
-  else
-    git clone "${EDLM_REPO}" "${EDLM_DIR}"
-  fi
+if [ ! -d "Energy-Diffusion-LLM" ]; then
+  git clone https://github.com/tgiles4/Energy-Diffusion-LLM.git
 fi
-cd "${EDLM_DIR}"
+cd Energy-Diffusion-LLM
 
-if [ -n "${EDLM_BRANCH:-}" ]; then
-  git fetch origin "${EDLM_BRANCH}" 2>/dev/null || git fetch origin
-  git checkout "${EDLM_BRANCH}"
-  git pull --ff-only origin "${EDLM_BRANCH}" 2>/dev/null || true
-fi
-
-# Load modules (match job_text8_mdlm_4gpu.slurm)
+# Load modules
 module load hosts/hopper
 module load gnu10/10.3.0-ya
 module load python/3.9.9-jh
@@ -61,10 +47,8 @@ if [ -f "${HOME}/.wandb_api_key" ]; then
   export WANDB_API_KEY=$(cat "${HOME}/.wandb_api_key")
 fi
 
-# BabyLM DIT (MDLM only, no energy): data=babylm, 100M strict corpus (BabyLM-2026-Strict), cosine noise.
-# Full 10 epochs (BabyLM budget). Run job_train_tokenizer_100m.slurm first so tokenizer + data exist.
-# Paths (data_dir, tokenizer, cache, save_dir, hydra.run.dir) use project_dir=$SCRATCH/babylm-edlm.
-"$ENV/bin/python" -u -m main \
+# DDP: srun + loader.num_workers=0 (same pattern as job_train_babylm_energy_hopper.slurm).
+srun --ntasks=2 --ntasks-per-node=2 --export=ALL "$ENV/bin/python" -u -m main \
   ++path=${path} \
   use_energy=False \
   data=babylm \
@@ -73,6 +57,7 @@ fi
   dataset_size=100M \
   noise=cosine \
   loader.global_batch_size=512 \
+  loader.num_workers=0 \
   trainer.max_epochs=10 \
   trainer.val_check_interval=1.0 \
   optim.lr=0.0003 \

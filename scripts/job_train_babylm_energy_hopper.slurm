@@ -32,30 +32,16 @@ if [ -z "${BABYLM_CKPT}" ]; then
   exit 1
 fi
 
-# Clone repo and set working directory (same pattern as scripts/job_text8_mdlm_4gpu.slurm).
-# Optional: sbatch --export=NONE,BABYLM_CKPT=...,EDLM_BRANCH=my-feature ...
+# Clone repo and set up environment (run on compute node).
 mkdir -p ${path}
 cd ${path}
 
-EDLM_REPO="${EDLM_REPO:-https://github.com/tgiles4/babylm-edlm-colab.git}"
-EDLM_DIR="${EDLM_DIR:-babylm-edlm-colab}"
-
-if [ ! -d "${EDLM_DIR}" ]; then
-  if [ -n "${EDLM_BRANCH:-}" ]; then
-    git clone -b "${EDLM_BRANCH}" "${EDLM_REPO}" "${EDLM_DIR}"
-  else
-    git clone "${EDLM_REPO}" "${EDLM_DIR}"
-  fi
+if [ ! -d "Energy-Diffusion-LLM" ]; then
+  git clone https://github.com/tgiles4/Energy-Diffusion-LLM.git
 fi
-cd "${EDLM_DIR}"
+cd Energy-Diffusion-LLM
 
-if [ -n "${EDLM_BRANCH:-}" ]; then
-  git fetch origin "${EDLM_BRANCH}" 2>/dev/null || git fetch origin
-  git checkout "${EDLM_BRANCH}"
-  git pull --ff-only origin "${EDLM_BRANCH}" 2>/dev/null || true
-fi
-
-# Load modules (match job_text8_nce_4gpu.slurm)
+# Load modules
 module load hosts/hopper
 module load gnu10/10.3.0-ya
 module load python/3.9.9-jh
@@ -64,6 +50,7 @@ module load cuda/12.4.0
 ENV=$SCRATCH/edlm/venv
 
 # W&B: load API key from a file (avoids putting secrets in the script or sbatch env).
+# Create once: echo "YOUR_WANDB_API_KEY" > ~/.wandb_api_key && chmod 600 ~/.wandb_api_key
 if [ -f "${HOME}/.wandb_api_key" ]; then
   export WANDB_API_KEY=$(cat "${HOME}/.wandb_api_key")
 fi
