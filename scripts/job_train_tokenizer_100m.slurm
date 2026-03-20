@@ -38,5 +38,5 @@ PROJECT_DIR="${SCRATCH}/babylm-edlm"
 
 "$ENV/bin/python" -u train_tokenizer.py \
   --project_dir "$PROJECT_DIR" \
-  --size 100M
+  --size 100M \
   --vocab_size 16384
