@@ -21,7 +21,6 @@
 #SBATCH --mem=64G
 #SBATCH --time=3-00:00:00
 
-# With --export=NONE, set SCRATCH so config project_dir ($SCRATCH/babylm-edlm) resolves on the compute node.
 export SCRATCH="${SCRATCH:-/scratch/$(id -un)}"
 export path=${SCRATCH}/edlm
 # Which diffusion checkpoint to load as EBM backbone. MDLM is trained for 10 epochs; choose any checkpoint
@@ -33,10 +32,28 @@ if [ -z "${BABYLM_CKPT}" ]; then
   exit 1
 fi
 
-# Run from repo root (directory containing this script's parent)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-cd "$REPO_ROOT"
+# Clone repo and set working directory (same pattern as scripts/job_text8_mdlm_4gpu.slurm).
+# Optional: sbatch --export=NONE,BABYLM_CKPT=...,EDLM_BRANCH=my-feature ...
+mkdir -p ${path}
+cd ${path}
+
+EDLM_REPO="${EDLM_REPO:-https://github.com/tgiles4/babylm-edlm-colab.git}"
+EDLM_DIR="${EDLM_DIR:-babylm-edlm-colab}"
+
+if [ ! -d "${EDLM_DIR}" ]; then
+  if [ -n "${EDLM_BRANCH:-}" ]; then
+    git clone -b "${EDLM_BRANCH}" "${EDLM_REPO}" "${EDLM_DIR}"
+  else
+    git clone "${EDLM_REPO}" "${EDLM_DIR}"
+  fi
+fi
+cd "${EDLM_DIR}"
+
+if [ -n "${EDLM_BRANCH:-}" ]; then
+  git fetch origin "${EDLM_BRANCH}" 2>/dev/null || git fetch origin
+  git checkout "${EDLM_BRANCH}"
+  git pull --ff-only origin "${EDLM_BRANCH}" 2>/dev/null || true
+fi
 
 # Load modules (match job_text8_nce_4gpu.slurm)
 module load hosts/hopper

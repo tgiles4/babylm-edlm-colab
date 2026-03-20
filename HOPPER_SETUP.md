@@ -87,14 +87,15 @@ Create once: `echo "YOUR_WANDB_API_KEY" > ~/.wandb_api_key && chmod 600 ~/.wandb
 
 ## Example sbatch / run command
 
-After cloning this repo (e.g. under `$SCRATCH/edlm/babylm-edlm-colab` or alongside the reference repo), use the BabyLM Hopper job script:
+The BabyLM and tokenizer job scripts (`scripts/job_train_babylm_hopper.slurm`, `job_train_babylm_energy_hopper.slurm`, `job_train_tokenizer_*.slurm`) match `job_text8_mdlm_4gpu.slurm`: they `mkdir -p $SCRATCH/edlm`, clone **babylm-edlm-colab** into `$SCRATCH/edlm/babylm-edlm-colab` if missing, `cd` there, then run. You can submit from any directory on the login node:
 
 ```bash
-cd $SCRATCH/edlm/babylm-edlm-colab   # or your repo path
-sbatch scripts/job_train_babylm_hopper.slurm
+sbatch path/to/job_train_babylm_hopper.slurm
 ```
 
-That script (see **Scripts** in the agent todo) sets `SCRATCH`, loads the same modules, uses the venv at `$SCRATCH/edlm/venv`, and runs `main` with `data=babylm` and Hopper-friendly paths. For a single-node, single-GPU run you can also run the same `python -u -m main ...` command interactively after loading modules and activating the venv.
+**Branch:** Your local git branch is not used on the cluster. The scratch clone tracks whatever is on the remote (default branch on first clone). To run a specific remote branch, pass `EDLM_BRANCH` (and optionally `EDLM_REPO` / `EDLM_DIR` for a fork or different clone folder), e.g. `sbatch --export=NONE,EDLM_BRANCH=my-feature scripts/job_train_babylm_hopper.slurm`. For the EBM job, include `BABYLM_CKPT` in the same `--export=NONE,...` list.
+
+That script sets `SCRATCH`, loads the same modules, uses the venv at `$SCRATCH/edlm/venv`, and runs `main` with `data=babylm` and Hopper-friendly paths. For a single-node, single-GPU run you can also run the same `python -u -m main ...` command interactively after loading modules and activating the venv from `$SCRATCH/edlm/babylm-edlm-colab`.
 
 ### BabyLM 10-epoch budget
 
