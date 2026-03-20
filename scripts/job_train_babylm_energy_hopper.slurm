@@ -77,7 +77,7 @@ srun --ntasks=2 --ntasks-per-node=2 --export=ALL "$ENV/bin/python" -u -m main \
   data=babylm \
   model=small \
   model.length=256 \
-  dataset_size=10M \
+  dataset_size=100M \
   noise=cosine \
   eval.checkpoint_path=${BABYLM_CKPT} \
   ebm_backbone=dit \
@@ -92,4 +92,4 @@ srun --ntasks=2 --ntasks-per-node=2 --export=ALL "$ENV/bin/python" -u -m main \
   checkpointing.resume_from_ckpt=false \
   wandb.id=null \
   wandb.group=babylm_energy \
-  wandb.name=babylm_10M_energy
+  wandb.name=babylm_100M_energy

@@ -7,6 +7,9 @@ they are not interchangeable.
 Default paths are project_dir/data/train_{size} and project_dir/tokenizer/tokenizer_{size}.json.
   - Hopper: set --project_dir in your sbatch script (e.g. $SCRATCH/babylm-edlm).
   - Colab/custom: pass --project_dir and optionally --data_dir/--output_path (see colab/COLAB.md).
+
+100M: empty train_100M/ triggers Hugging Face download of BabyLM-2026-Strict (see babylm_hf.py).
+10M: populate train_10M/*.train first; no default Hub download.
 """
 
 import argparse
@@ -16,6 +19,8 @@ import os
 from tokenizers import Tokenizer, models, pre_tokenizers, processors, trainers
 from tokenizers.normalizers import NFD, Lowercase, Sequence, StripAccents
 from transformers import PreTrainedTokenizerFast
+
+from babylm_hf import ensure_babylm_train_files
 
 BABYLM_SIZES = ('10M', '100M')
 DEFAULT_SIZE = '10M'
@@ -149,6 +154,15 @@ def main():
         type=int,
         default=2,
         help='Minimum frequency for tokens (default: 2)')
+    parser.add_argument(
+        '--no_download',
+        action='store_true',
+        help='Do not download BabyLM-2026-Strict from Hugging Face (100M only); fail if *.train missing')
+    parser.add_argument(
+        '--hf_cache_dir',
+        type=str,
+        default=None,
+        help='Cache dir for Hub snapshot (default: HF_HOME or ~/.cache/huggingface)')
 
     args = parser.parse_args()
 
@@ -167,12 +181,19 @@ def main():
 
     args.data_dir = expand(args.data_dir)
     args.output_path = expand(args.output_path)
+    args.hf_cache_dir = expand(args.hf_cache_dir) if args.hf_cache_dir else None
 
-    # Validate paths
+    ensure_babylm_train_files(
+        args.data_dir,
+        args.size,
+        hf_cache_dir=args.hf_cache_dir,
+        no_download=args.no_download,
+    )
+
     if not os.path.exists(args.data_dir):
         raise FileNotFoundError(
             f'Data directory not found: {args.data_dir}\n'
-            f'Ensure BabyLM .train files are in that directory, or run with data=babylm first so the dataloader can auto-download (see BABYLM_DOWNLOAD_PLAN).')
+            'See agent-tasks/BABYLM_2026_HF_DOWNLOAD_PLAN.md')
 
     train_bpe_tokenizer(
         data_dir=args.data_dir,

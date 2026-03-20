@@ -17,6 +17,7 @@ import tokenizers
 import torch
 import transformers
 
+import babylm_hf
 import utils
 
 LOGGER = utils.get_logger(__name__)
@@ -179,36 +180,53 @@ def get_lambada_test_dataset():
     return dataset
 
 
-def get_babylm_dataset(data_dir, cache_dir=None):
+def get_babylm_dataset(data_dir, cache_dir=None, dataset_size=None):
   """
   Load BabyLM dataset from .train files in a directory.
 
-  Reads all .train files from the specified directory, combines them,
-  and splits into 90% train / 10% validation. If cache_dir is set,
-  the raw combined+split DatasetDict is cached to avoid re-reading
-  .train files; only one process builds the cache (single-writer lock).
+  There is no official validation split on the Hub for the 2026 strict training corpus;
+  validation is a **local holdout**: either pre-materialized ``*.val`` files (100M Hub path)
+  or an in-memory 90/10 split (``train_test_split(..., test_size=0.1, seed=42)``) when only
+  ``*.train`` files exist.
+
+  If cache_dir is set, the DatasetDict is cached; only one process builds the cache
+  (single-writer lock).
 
   Args:
     data_dir: Path to directory containing .train files (e.g., /data/train_10M)
     cache_dir: Optional cache directory for the raw combined dataset
+    dataset_size: ``10M`` or ``100M`` (from config); if None, inferred from ``data_dir`` basename
 
   Returns:
     datasets.DatasetDict with 'train' and 'validation' splits
   """
   import glob
 
-  cache_subdir = 'babylm_raw'
-  data_dir_basename = os.path.basename(os.path.normpath(data_dir))
-  cache_path = os.path.join(cache_dir, cache_subdir, data_dir_basename) if cache_dir else None
-  if cache_path and utils.fsspec_exists(cache_path):
-    LOGGER.info(f'Loading BabyLM raw dataset from cache: {cache_path}')
-    return datasets.load_from_disk(cache_path)
+  ds_size = dataset_size or babylm_hf.infer_dataset_size_from_data_dir(data_dir)
+  if ds_size is None:
+    raise ValueError(
+      'Could not infer dataset_size (10M vs 100M) from data_dir; '
+      'set dataset_size in config (e.g. dataset_size=100M) or use a path like .../train_100M')
 
-  # Find all .train files in the directory
+  hub_cache = os.path.join(cache_dir, 'hf_hub') if cache_dir else None
+  babylm_hf.ensure_babylm_train_files(
+    data_dir, ds_size, hf_cache_dir=hub_cache)
+
   train_files = glob.glob(os.path.join(data_dir, '*.train'))
+  val_files = glob.glob(os.path.join(data_dir, '*.val'))
   if not train_files:
     raise ValueError(
       f'No .train files found in directory: {data_dir}')
+
+  cache_subdir = 'babylm_raw'
+  data_dir_basename = os.path.basename(os.path.normpath(data_dir))
+  cache_suffix = '_explicit_val' if val_files else ''
+  cache_path = (
+    os.path.join(cache_dir, cache_subdir, data_dir_basename + cache_suffix)
+    if cache_dir else None)
+  if cache_path and utils.fsspec_exists(cache_path):
+    LOGGER.info(f'Loading BabyLM raw dataset from cache: {cache_path}')
+    return datasets.load_from_disk(cache_path)
 
   builder = False
   lock_path = (cache_path + '.lock') if cache_path else None
@@ -236,31 +254,49 @@ def get_babylm_dataset(data_dir, cache_dir=None):
   LOGGER.info(f'Found {len(train_files)} .train files in {data_dir}')
   LOGGER.info(f'Files: {[os.path.basename(f) for f in train_files]}')
 
-  # Read all files and combine
-  all_texts = []
-  for train_file in sorted(train_files):
-    LOGGER.info(f'Reading {os.path.basename(train_file)}...')
-    with open(train_file, 'r', encoding='utf-8') as f:
-      # Read line by line, each line is a text example
-      for line in f:
-        line = line.strip()
-        if line:  # Skip empty lines
-          all_texts.append({'text': line})
+  if val_files:
+    LOGGER.info(
+      f'Found {len(val_files)} .val files (train/val split on disk); '
+      f'Files: {[os.path.basename(f) for f in val_files]}')
+    all_train = []
+    for train_file in sorted(train_files):
+      LOGGER.info(f'Reading {os.path.basename(train_file)}...')
+      with open(train_file, 'r', encoding='utf-8') as f:
+        for line in f:
+          line = line.strip()
+          if line:
+            all_train.append({'text': line})
+    all_val = []
+    for val_file in sorted(val_files):
+      LOGGER.info(f'Reading {os.path.basename(val_file)}...')
+      with open(val_file, 'r', encoding='utf-8') as f:
+        for line in f:
+          line = line.strip()
+          if line:
+            all_val.append({'text': line})
+    dataset_dict = datasets.DatasetDict({
+      'train': datasets.Dataset.from_list(all_train),
+      'validation': datasets.Dataset.from_list(all_val),
+    })
+  else:
+    all_texts = []
+    for train_file in sorted(train_files):
+      LOGGER.info(f'Reading {os.path.basename(train_file)}...')
+      with open(train_file, 'r', encoding='utf-8') as f:
+        for line in f:
+          line = line.strip()
+          if line:
+            all_texts.append({'text': line})
 
-  LOGGER.info(f'Loaded {len(all_texts)} total examples')
+    LOGGER.info(f'Loaded {len(all_texts)} total examples')
 
-  # Create dataset from combined texts
-  full_dataset = datasets.Dataset.from_list(all_texts)
-
-  # Split into 90% train / 10% validation
-  split_dataset = full_dataset.train_test_split(
-    test_size=0.1, seed=42, shuffle=True)
-
-  # Rename 'test' to 'validation' to match expected format
-  dataset_dict = datasets.DatasetDict({
-    'train': split_dataset['train'],
-    'validation': split_dataset['test']
-  })
+    full_dataset = datasets.Dataset.from_list(all_texts)
+    split_dataset = full_dataset.train_test_split(
+      test_size=0.1, seed=42, shuffle=True)
+    dataset_dict = datasets.DatasetDict({
+      'train': split_dataset['train'],
+      'validation': split_dataset['test']
+    })
 
   LOGGER.info(
     f'Split dataset: {len(dataset_dict["train"])} train, '
@@ -404,7 +440,7 @@ def _group_texts(examples, block_size, bos, eos):
 def get_dataset(
     dataset_name, tokenizer, wrap, mode, cache_dir,
     block_size=1024, num_proc=len(os.sched_getaffinity(0)), streaming=False,
-    data_dir=None):
+    data_dir=None, dataset_size=None):
   if wrap:
     filename = f'{dataset_name}_{mode}_bs{block_size}_wrapped.dat'
   else:
@@ -503,7 +539,8 @@ def get_dataset(
       raise ValueError(
         'babylm dataset requires data_dir to be set. '
         'Set config.data.data_dir to the directory containing .train files')
-    dataset = get_babylm_dataset(data_dir, cache_dir=cache_dir)
+    dataset = get_babylm_dataset(
+      data_dir, cache_dir=cache_dir, dataset_size=dataset_size)
   else:
     dataset = datasets.load_dataset(
       dataset_name,
@@ -816,7 +853,8 @@ def get_dataloaders(config, tokenizer, skip_train=False,
       wrap=config.data.wrap,
       cache_dir=config.data.cache_dir,
       block_size=config.model.length,
-      data_dir=getattr(config.data, 'data_dir', None))
+      data_dir=getattr(config.data, 'data_dir', None),
+      dataset_size=getattr(config, 'dataset_size', None))
 
   if config.data.valid in ['text8', 'lm1b', 'ag_news']:
     validation_split = 'test'
@@ -833,7 +871,8 @@ def get_dataloaders(config, tokenizer, skip_train=False,
       cache_dir=config.data.cache_dir,
       block_size=config.model.length,
       streaming=False,
-      data_dir=getattr(config.data, 'data_dir', None))
+      data_dir=getattr(config.data, 'data_dir', None),
+      dataset_size=getattr(config, 'dataset_size', None))
 
   if skip_train:
     train_loader = None

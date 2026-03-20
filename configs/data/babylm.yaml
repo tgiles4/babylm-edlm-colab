@@ -1,8 +1,11 @@
 # Train tokenizer first: run scripts/job_train_tokenizer_10m.slurm or job_train_tokenizer_100m.slurm
 # (or: python train_tokenizer.py --project_dir /path/to/project --size 10M). This creates
 # project_dir/tokenizer/tokenizer_<size>.json and expects project_dir/data/train_<size>/*.train.
+# 100M strict: empty train_100M triggers HF download (BabyLM-community/BabyLM-2026-Strict) via
+# babylm_hf.ensure_babylm_train_files; validation is a local holdout (see HOPPER_SETUP.md).
+# 10M: bring-your-own *.train under train_10M (no default Hub download).
 train: babylm
-valid: babylm  # Uses same data, automatically split 90/10 for train/validation
+valid: babylm  # Local validation: *.val on disk (100M Hub path) or 90/10 holdout from *.train only
 # Hopper defaults (project_dir = $SCRATCH/babylm-edlm when SCRATCH is set). Colab: override with full Drive paths.
 # Tokenizer and data_dir are size-specific: 10M and 100M use separate tokenizers (tokenizer_10M.json vs tokenizer_100M.json).
 tokenizer_name_or_path: ${project_dir}/tokenizer/tokenizer_${dataset_size}.json

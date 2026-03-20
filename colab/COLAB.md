@@ -64,8 +64,8 @@ data.data_dir=/content/drive/MyDrive/babylm-edlm/data/train_100M
 ```
 
 Ensure on Drive you have:
-- `tokenizer/tokenizer.json` (from `train_tokenizer.py` or your tokenizer)
-- `data/train_10M/` (and optionally `data/train_100M/`) with BabyLM `.train` files
+- `tokenizer/tokenizer_10M.json` or `tokenizer/tokenizer_100M.json` (from `train_tokenizer.py`; must match `dataset_size`)
+- `data/train_10M/` with your own `*.train` files for 10M, **or** run `train_tokenizer.py --size 100M` once so an empty `train_100M/` triggers download of [BabyLM-2026-Strict](https://huggingface.co/datasets/BabyLM-community/BabyLM-2026-Strict) (see `babylm_hf.py`)
 
 ## Long-running training in Colab
 

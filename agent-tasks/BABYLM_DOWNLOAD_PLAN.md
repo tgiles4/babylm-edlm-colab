@@ -1,5 +1,7 @@
 # Plan: Download BabyLM 10M or 100M (Same Pattern as Text8)
 
+> **Superseded for the 2026 challenge:** Use **`BABYLM_2026_HF_DOWNLOAD_PLAN.md`** — Hub source [BabyLM-community/BabyLM-2026-Strict](https://huggingface.co/datasets/BabyLM-community/BabyLM-2026-Strict), implementation in `babylm_hf.py`. The notes below referred to the older `cambridge-climb/BabyLM` layout.
+
 **Goal:** Obtain the 10M or 100M BabyLM training data automatically when the dataset is first requested, using the same pattern as Text8 and other datasets in this codebase—no separate download scripts.
 
 ---

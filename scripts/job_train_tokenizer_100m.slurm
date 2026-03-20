@@ -1,6 +1,7 @@
 #!/bin/bash
-# Train BPE tokenizer on BabyLM 100M corpus. CPU-only; uses same venv as job_train_babylm_hopper (Torch 2.6).
-# Output: project_dir/tokenizer/tokenizer_100M.json (default project_dir=$SCRATCH/babylm-edlm).
+# Train BPE tokenizer on BabyLM 100M strict corpus. CPU-only; uses same venv as job_train_babylm_hopper.
+# First run: downloads BabyLM-community/BabyLM-2026-Strict from Hugging Face (network); allow enough walltime.
+# Output: project_dir/tokenizer/tokenizer_100M.json; data: train_100M/*.train + *.val (see babylm_hf.py).
 # Submit from repo root: sbatch scripts/job_train_tokenizer_100m.slurm
 #SBATCH --partition=normal
 #SBATCH --job-name=tok-100M
@@ -31,8 +32,6 @@ module load hosts/hopper
 module load gnu10/10.3.0-ya
 module load python/3.9.9-jh
 module load cuda/12.4.0
-
-ENV=$SCRATCH/edlm/venv
 
 ENV=$SCRATCH/edlm/venv
 PROJECT_DIR="${SCRATCH}/babylm-edlm"

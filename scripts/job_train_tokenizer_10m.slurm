@@ -1,5 +1,6 @@
 #!/bin/bash
-# Train BPE tokenizer on BabyLM 10M corpus. CPU-only; uses same venv as job_train_babylm_hopper (Torch 2.6).
+# Train BPE tokenizer on BabyLM 10M corpus. CPU-only; uses same venv as job_train_babylm_hopper.
+# 10M: no Hub auto-download — populate project_dir/data/train_10M/*.train first (strict-small or subsample).
 # Output: project_dir/tokenizer/tokenizer_10M.json (default project_dir=$SCRATCH/babylm-edlm).
 # Submit from repo root: sbatch scripts/job_train_tokenizer_10m.slurm
 #SBATCH --partition=normal

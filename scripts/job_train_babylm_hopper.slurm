@@ -61,15 +61,16 @@ if [ -f "${HOME}/.wandb_api_key" ]; then
   export WANDB_API_KEY=$(cat "${HOME}/.wandb_api_key")
 fi
 
-# BabyLM DIT (MDLM only, no energy): data=babylm, 10M corpus, cosine noise. Full 10 epochs (BabyLM budget).
-# Paths (data_dir, tokenizer, cache, save_dir, hydra.run.dir) use config defaults from project_dir=$SCRATCH/babylm-edlm.
+# BabyLM DIT (MDLM only, no energy): data=babylm, 100M strict corpus (BabyLM-2026-Strict), cosine noise.
+# Full 10 epochs (BabyLM budget). Run job_train_tokenizer_100m.slurm first so tokenizer + data exist.
+# Paths (data_dir, tokenizer, cache, save_dir, hydra.run.dir) use project_dir=$SCRATCH/babylm-edlm.
 "$ENV/bin/python" -u -m main \
   ++path=${path} \
   use_energy=False \
   data=babylm \
   model=small \
   model.length=256 \
-  dataset_size=10M \
+  dataset_size=100M \
   noise=cosine \
   loader.global_batch_size=512 \
   trainer.max_epochs=10 \
@@ -80,4 +81,4 @@ fi
   lr_scheduler.warmup_t=2000 \
   wandb.id=null \
   wandb.group=babylm_mdlm \
-  wandb.name=babylm_10M
+  wandb.name=babylm_100M

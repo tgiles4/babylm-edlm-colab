@@ -53,7 +53,7 @@ $SCRATCH/babylm-edlm/
 │   ├── train_10M/     # BabyLM .train files for 10M-token corpus
 │   └── train_100M/    # BabyLM .train files for 100M-token corpus (optional)
 ├── tokenizer/
-│   └── tokenizer.json # BPE tokenizer (train with train_tokenizer.py on the .train data)
+│   └── tokenizer_10M.json / tokenizer_100M.json  # BPE from train_tokenizer.py (size must match data)
 ├── cache/             # Cache for tokenized datasets (created automatically if needed)
 ├── checkpoints/       # Training checkpoints (default save_dir)
 ├── outputs/           # Hydra run outputs (default hydra.run.dir)
@@ -65,7 +65,7 @@ Config keys (see `configs/config.yaml` and `configs/data/babylm.yaml`):
 | Purpose     | Config key                   | Default path |
 |------------|------------------------------|--------------|
 | Data dir   | `data.data_dir`              | `{project_dir}/data/train_10M` (or `train_100M` for 100M) |
-| Tokenizer  | `data.tokenizer_name_or_path`| `{project_dir}/tokenizer/tokenizer.json` |
+| Tokenizer  | `data.tokenizer_name_or_path`| `{project_dir}/tokenizer/tokenizer_${dataset_size}.json` |
 | Cache      | `data.cache_dir`             | `{project_dir}/cache` |
 | Checkpoints| `checkpointing.save_dir`     | under `{project_dir}/checkpoints/` |
 | Outputs    | `hydra.run.dir`              | under `{project_dir}/outputs/` |
@@ -103,21 +103,23 @@ BabyLM rules allow at most **10 epochs** of training. We use the full 10 epochs 
 
 ---
 
-## BabyLM dataset – access patterns (no download code)
+## BabyLM dataset (2026 strict) – Hugging Face + local layout
 
-You need the **BabyLM challenge** data as **plain-text `.train` files** (one sentence per line). The training code expects a directory of `*.train` files (e.g. `bnc_spoken.train`, `childes.train`, `gutenberg.train`, etc.); it discovers all `*.train` in `data_dir` and uses them.
+**Canonical training corpus (100M strict):** [BabyLM-community/BabyLM-2026-Strict](https://huggingface.co/datasets/BabyLM-community/BabyLM-2026-Strict) on Hugging Face (MIT). The repo ships per-domain `*.train.txt` files; this codebase materializes them under `data/train_100M` as:
 
-### Where the data comes from
+- `babylm_strict_train.train` — training lines (90% of non-empty lines after shuffling with seed 42)
+- `babylm_strict_validation.val` — held-out validation (10%)
 
-- **Official source:** BabyLM Challenge (babylm.github.io or the challenge organizers’ repository). The benchmark provides **strict** and **strict-small** evaluation sets; for **training**, use the released training corpora that match the 10M and 100M token settings.
-- **Hugging Face:** The BabyLM datasets may be hosted on Hugging Face (e.g. under a `babylm` or challenge organization). Search for “BabyLM” or “babylm strict” to find the correct dataset card and files.
-- **Format:** You need the **raw training text** (or pre-split `.train` files). The pipeline expects **one sentence per line** in `.train` files; if the official release is in another format (e.g. JSON, single file), you must **convert or split** it into one `.train` file per source (or one combined `.train` file) and place them in `data/train_10M` or `data/train_100M`.
+**Tokenizer training** uses only `*.train` files, so the BPE model does not see validation lines.
 
-### How to get and place the data (pattern only)
+**MDLM training** (`data=babylm`, `dataset_size=100M`): the dataloader calls `babylm_hf.ensure_babylm_train_files` before loading. On a cold `train_100M/`, it downloads the Hub snapshot (first run needs network; optional `HF_TOKEN` / `HUGGING_FACE_HUB_TOKEN` if your environment requires auth). Hub cache defaults under `HF_HOME` or `~/.cache/huggingface`; snapshots also go under `{cache_dir}/hf_hub/...` when `data.cache_dir` is set.
 
-1. **Obtain:** From the official BabyLM site or Hugging Face, download (or clone) the training data for the 10M and/or 100M token regime. Prefer the official challenge data so results are comparable.
-2. **Format:** Ensure the data is (or is converted to) one sentence per line, in files with extension `.train`.
-3. **Place:** Put 10M-corpus `.train` files under `$SCRATCH/babylm-edlm/data/train_10M` and, if using 100M, under `$SCRATCH/babylm-edlm/data/train_100M`. The code uses `data.data_dir` (default `{project_dir}/data/train_10M`).
-4. **Tokenizer:** After the `.train` files are in place, train a BPE tokenizer with `train_tokenizer.py` (see its help and repo docs), writing `tokenizer.json` to `$SCRATCH/babylm-edlm/tokenizer/tokenizer.json`, or override `data.tokenizer_name_or_path` to point to your tokenizer path.
+**Validation:** There is no separate Hub “validation” split for this training corpus. The **validation** split used for metrics is the **local holdout** above (or, if you only have legacy `*.train` files and no `*.val`, an in-memory 90/10 split with the same seed — see `get_babylm_dataset` in `dataloader.py`).
 
-No download or conversion scripts are provided here; use the official or Hugging Face access methods (browser, CLI, or your own scripts) and follow the layout above.
+**10M (strict-small):** There is **no** default Hugging Face download in this repo. Populate `data/train_10M/*.train` yourself (official strict-small release, symlink, or subsample from `train_100M`), then run `train_tokenizer.py --size 10M` and training with `dataset_size=10M`.
+
+**Ordering (100M from scratch):**  
+1. `sbatch scripts/job_train_tokenizer_100m.slurm` (downloads + BPE)  
+2. `sbatch scripts/job_train_babylm_hopper.slurm` (`dataset_size=100M`).  
+
+See `agent-tasks/BABYLM_2026_HF_DOWNLOAD_PLAN.md` for design notes.
