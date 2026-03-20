@@ -11,7 +11,7 @@ valid: babylm  # Local validation: *.val on disk (100M Hub path) or 90/10 holdou
 tokenizer_name_or_path: ${project_dir}/tokenizer/tokenizer_${dataset_size}.json
 cache_dir: ${project_dir}/cache
 data_dir: ${project_dir}/data/train_${dataset_size}  # train_10M or train_100M; must match tokenizer size
-wrap: True
+wrap: False
 streaming: False
 
 # Usage examples:

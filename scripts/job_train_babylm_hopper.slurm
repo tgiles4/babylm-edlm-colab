@@ -65,8 +65,8 @@ srun --ntasks=2 --ntasks-per-node=2 --export=ALL "$ENV/bin/python" -u -m main \
   trainer.max_epochs=10 \
   trainer.val_check_interval=1.0 \
   trainer.gradient_clip_val=2.0 \
-  optim.lr=7e-3 \
-  optim.weight_decay=0.01 \
+  optim.lr=0.007 \
+  optim.weight_decay=0.1 \
   lr_scheduler=cosine_decay_warmup \
   wandb.id=null \
   wandb.group=babylm_mdlm \
