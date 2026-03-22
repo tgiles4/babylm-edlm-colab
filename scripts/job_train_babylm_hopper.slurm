@@ -51,7 +51,7 @@ fi
 # trainer.max_steps & lr_scheduler.warmup_t are now auto-computed from
 # dataset_size, model.length, global_batch_size, and max_epochs (see config.yaml).
 # Leave some epochs for the energy NCE model (10 epoch total budget).
-srun --ntasks=2 --ntasks-per-node=2 --export=ALL "$ENV/bin/python" -u -m main \
+srun --mpi=pmix --ntasks=2 --ntasks-per-node=2 --export=ALL "$ENV/bin/python" -u -m main \
   ++path=${path} \
   use_energy=False \
   data=babylm \
@@ -64,7 +64,7 @@ srun --ntasks=2 --ntasks-per-node=2 --export=ALL "$ENV/bin/python" -u -m main \
   loader.num_workers=0 \
   trainer.max_epochs=10 \
   trainer.val_check_interval=1.0 \
-  trainer.gradient_clip_val=2.0 \
+  trainer.gradient_clip_val=1.0 \
   optim.lr=0.007 \
   optim.weight_decay=0.1 \
   lr_scheduler=cosine_decay_warmup \
