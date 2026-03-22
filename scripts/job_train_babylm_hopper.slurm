@@ -8,7 +8,7 @@
 #SBATCH --job-name=babylm_mdlm
 #SBATCH --qos=gpu
 #SBATCH --partition=contrib-gpuq
-#SBATCH --gres=gpu:A100.80gb:2
+#SBATCH --gres=gpu:A100.80gb:1
 
 #SBATCH --output=babylm_mdlm-%j.out
 #SBATCH --error=babylm_mdlm-%j.err
@@ -16,8 +16,7 @@
 #SBATCH --constraint=amd
 
 #SBATCH --nodes=1
-# Must match gres GPU count for DDP.
-#SBATCH --ntasks-per-node=2
+#SBATCH --ntasks-per-node=1
 
 #SBATCH --mem=64G
 #SBATCH --time=0-03:00:00
@@ -47,11 +46,10 @@ if [ -f "${HOME}/.wandb_api_key" ]; then
   export WANDB_API_KEY=$(cat "${HOME}/.wandb_api_key")
 fi
 
-# DDP: srun + loader.num_workers=0 (same pattern as job_train_babylm_energy_hopper.slurm).
-# trainer.max_steps & lr_scheduler.warmup_t are now auto-computed from
-# dataset_size, model.length, global_batch_size, and max_epochs (see config.yaml).
-# Leave some epochs for the energy NCE model (10 epoch total budget).
-srun --mpi=pmix --ntasks=2 --ntasks-per-node=2 --export=ALL "$ENV/bin/python" -u -m main \
+# Single GPU while srun multi-task is broken cluster-wide.
+# batch_size=64 fits on 1x A100 80GB; accumulate_grad_batches auto-computes to 8
+# for effective global_batch_size=512.
+"$ENV/bin/python" -u -m main \
   ++path=${path} \
   use_energy=False \
   data=babylm \
@@ -59,8 +57,8 @@ srun --mpi=pmix --ntasks=2 --ntasks-per-node=2 --export=ALL "$ENV/bin/python" -u
   model.length=512 \
   dataset_size=100M \
   loader.global_batch_size=512 \
-  loader.batch_size=128 \
-  loader.eval_batch_size=128 \
+  loader.batch_size=64 \
+  loader.eval_batch_size=64 \
   loader.num_workers=0 \
   trainer.max_epochs=10 \
   trainer.val_check_interval=1.0 \
