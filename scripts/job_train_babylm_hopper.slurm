@@ -19,7 +19,7 @@
 #SBATCH --ntasks-per-node=1
 
 #SBATCH --mem=64G
-#SBATCH --time=0-03:00:00
+#SBATCH --time=0-12:00:00
 
 # Clone repo and set up environment (run on compute node). With --export=NONE, set SCRATCH if needed.
 export SCRATCH="${SCRATCH:-/scratch/$(id -un)}"

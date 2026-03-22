@@ -1,3 +1,4 @@
+import math
 import os
 import time
 
@@ -279,6 +280,24 @@ def _train(config, logger, tokenizer):
   train_ds, valid_ds = dataloader.get_dataloaders(
     config, tokenizer)
   _print_batch(train_ds, valid_ds, tokenizer)
+
+  # Recompute max_steps from the actual dataset size.
+  # The config formula estimates sequence count from dataset_size (e.g. "100M"),
+  # but with wrap=False each document becomes its own padded sequence, so the
+  # real count can be much larger than tokens // seq_len.
+  if train_ds is not None:
+    num_sequences = len(train_ds.dataset)
+    steps_per_epoch = math.ceil(
+      num_sequences / config.loader.global_batch_size)
+    actual_max_steps = steps_per_epoch * config.trainer.max_epochs
+    estimated_max_steps = config.trainer.max_steps
+    if actual_max_steps != estimated_max_steps:
+      logger.info(
+        f'Correcting max_steps: {estimated_max_steps} -> {actual_max_steps} '
+        f'({num_sequences} sequences, {steps_per_epoch} steps/epoch, '
+        f'{config.trainer.max_epochs} epochs)')
+      with omegaconf.open_dict(config):
+        config.trainer.max_steps = actual_max_steps
 
   # Instantiate model based on use_energy flag
   if config.get('use_energy', False):
