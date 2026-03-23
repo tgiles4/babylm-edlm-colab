@@ -48,7 +48,7 @@ if [ -f "${HOME}/.wandb_api_key" ]; then
 fi
 
 # 2-GPU DDP via srun. Uses --mpi=pmi2 to work around cluster-wide PMIx hang (SLURM 24.11.5).
-# batch_size=64 per GPU (128 OOMs with DDP overhead); accumulate_grad_batches auto-computes to 4.
+# batch_size=112 per GPU (128 OOMs with DDP overhead); accumulate_grad_batches auto-computes to 2.
 # loader.num_workers=0 avoids DataLoader BrokenPipe with multi-GPU DDP.
 srun --ntasks=2 --ntasks-per-node=2 --mpi=pmi2 --export=ALL "$ENV/bin/python" -u -m main \
   ++path=${path} \
@@ -57,8 +57,8 @@ srun --ntasks=2 --ntasks-per-node=2 --mpi=pmi2 --export=ALL "$ENV/bin/python" -u
   model=small \
   model.length=512 \
   dataset_size=100M \
-  loader.global_batch_size=512 \
-  loader.batch_size=64 \
+  loader.global_batch_size=448 \
+  loader.batch_size=112 \
   loader.eval_batch_size=128 \
   loader.num_workers=0 \
   trainer.max_epochs=10 \
