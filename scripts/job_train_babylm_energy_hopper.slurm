@@ -55,10 +55,10 @@ if [ -f "${HOME}/.wandb_api_key" ]; then
   export WANDB_API_KEY=$(cat "${HOME}/.wandb_api_key")
 fi
 
-# BabyLM EBM (use_energy=True): load diffusion backbone from checkpoint, train with energy.
-# loader.num_workers=0 avoids DataLoader BrokenPipe with multi-GPU.
-# srun launches one process per task so DDP uses both GPUs; --export=ALL passes WANDB_API_KEY to all tasks.
-srun --ntasks=2 --ntasks-per-node=2 --export=ALL "$ENV/bin/python" -u -m main \
+# 2-GPU DDP via srun. Uses --mpi=pmi2 to work around cluster-wide PMIx hang (SLURM 24.11.5).
+# loader.num_workers=0 avoids DataLoader BrokenPipe with multi-GPU DDP.
+# --export=ALL passes WANDB_API_KEY to all tasks.
+srun --ntasks=2 --ntasks-per-node=2 --mpi=pmi2 --export=ALL "$ENV/bin/python" -u -m main \
   ++path=${path} \
   use_energy=True \
   data=babylm \

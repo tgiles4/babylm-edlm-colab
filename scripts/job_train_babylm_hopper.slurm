@@ -8,7 +8,7 @@
 #SBATCH --job-name=babylm_mdlm
 #SBATCH --qos=gpu
 #SBATCH --partition=contrib-gpuq
-#SBATCH --gres=gpu:A100.80gb:1
+#SBATCH --gres=gpu:A100.80gb:2
 
 #SBATCH --output=babylm_mdlm-%j.out
 #SBATCH --error=babylm_mdlm-%j.err
@@ -16,10 +16,11 @@
 #SBATCH --constraint=amd
 
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
+# Must match gres GPU count for DDP.
+#SBATCH --ntasks-per-node=2
 
 #SBATCH --mem=64G
-#SBATCH --time=0-12:00:00
+#SBATCH --time=3-00:00:00
 
 # Clone repo and set up environment (run on compute node). With --export=NONE, set SCRATCH if needed.
 export SCRATCH="${SCRATCH:-/scratch/$(id -un)}"
@@ -46,10 +47,10 @@ if [ -f "${HOME}/.wandb_api_key" ]; then
   export WANDB_API_KEY=$(cat "${HOME}/.wandb_api_key")
 fi
 
-# Single GPU while srun multi-task is broken cluster-wide.
-# batch_size=128 on 1x A100 80GB (~65-75% VRAM); accumulate_grad_batches
-# auto-computes to 4 for effective global_batch_size=512.
-"$ENV/bin/python" -u -m main \
+# 2-GPU DDP via srun. Uses --mpi=pmi2 to work around cluster-wide PMIx hang (SLURM 24.11.5).
+# With 2 GPUs and global_batch_size=512 Hydra auto-computes per-GPU batch=256, accumulate_grad_batches=1.
+# loader.num_workers=0 avoids DataLoader BrokenPipe with multi-GPU DDP.
+srun --ntasks=2 --ntasks-per-node=2 --mpi=pmi2 --export=ALL "$ENV/bin/python" -u -m main \
   ++path=${path} \
   use_energy=False \
   data=babylm \
@@ -57,7 +58,6 @@ fi
   model.length=512 \
   dataset_size=100M \
   loader.global_batch_size=512 \
-  loader.batch_size=128 \
   loader.eval_batch_size=128 \
   loader.num_workers=0 \
   trainer.max_epochs=10 \
