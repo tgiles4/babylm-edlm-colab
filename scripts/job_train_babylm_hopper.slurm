@@ -47,8 +47,8 @@ if [ -f "${HOME}/.wandb_api_key" ]; then
 fi
 
 # Single GPU while srun multi-task is broken cluster-wide.
-# batch_size=256 fits on 1x A100 80GB (~70-80% VRAM); accumulate_grad_batches
-# auto-computes to 2 for effective global_batch_size=512.
+# batch_size=128 on 1x A100 80GB (~65-75% VRAM); accumulate_grad_batches
+# auto-computes to 4 for effective global_batch_size=512.
 "$ENV/bin/python" -u -m main \
   ++path=${path} \
   use_energy=False \
@@ -57,8 +57,8 @@ fi
   model.length=512 \
   dataset_size=100M \
   loader.global_batch_size=512 \
-  loader.batch_size=256 \
-  loader.eval_batch_size=256 \
+  loader.batch_size=128 \
+  loader.eval_batch_size=128 \
   loader.num_workers=0 \
   trainer.max_epochs=10 \
   trainer.val_check_interval=1.0 \
