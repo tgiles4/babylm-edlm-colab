@@ -18,6 +18,7 @@ scikit-learn==1.4.0
 timm==0.9.16
 transformers==4.38.2
 huggingface_hub>=0.20.0  # BabyLM-2026-Strict snapshot_download (also transitive via transformers)
+torchmetrics>=1.0.0  # Used directly by eval_baselines.py (also transitive via lightning)
 wandb>=0.16.0  # Updated to remove pathtools dependency (incompatible with Python 3.12)
 
 # Required build dependencies
