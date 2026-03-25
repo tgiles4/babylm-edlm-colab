@@ -53,6 +53,16 @@ LOG2 = math.log(2)
 NEG_INF = -1_000_000.0
 
 
+def _load_tokenizer(name_or_path: str, **kwargs) -> "AutoTokenizer":
+    """Load tokenizer, falling back to the slow tokenizer if the fast
+    (Rust) one fails due to an incompatible ``tokenizer.json``."""
+    try:
+        return AutoTokenizer.from_pretrained(name_or_path, **kwargs)
+    except Exception:
+        return AutoTokenizer.from_pretrained(
+            name_or_path, use_fast=False, **kwargs)
+
+
 # ---------------------------------------------------------------------------
 # Metrics (mirrored from diffusion.py for standalone use)
 # ---------------------------------------------------------------------------
@@ -284,7 +294,7 @@ def eval_diffusion(args):
     hf_model = AutoModelForMaskedLM.from_pretrained(
         args.model_name_or_path, subfolder=subfolder,
         trust_remote_code=True)
-    tokenizer = AutoTokenizer.from_pretrained(
+    tokenizer = _load_tokenizer(
         args.model_name_or_path, subfolder=subfolder)
 
     device = torch.device(args.device)
@@ -338,7 +348,7 @@ def eval_ar(args):
     """Evaluate an autoregressive (GPT-2) model."""
     print(f"Loading AR model from {args.model_name_or_path} ...")
     model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path)
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
+    tokenizer = _load_tokenizer(args.model_name_or_path)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.pad_token_id = tokenizer.eos_token_id
@@ -435,7 +445,7 @@ def eval_gpt_bert(args):
     """Evaluate a GPT-BERT model with up to three NLL methods."""
     print(f"Loading GPT-BERT from {args.model_name_or_path} ...")
 
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
+    tokenizer = _load_tokenizer(args.model_name_or_path)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.pad_token_id = tokenizer.eos_token_id
