@@ -146,20 +146,30 @@ def load_val_texts(data_dir):
 # ---------------------------------------------------------------------------
 
 class TokenizedDataset(Dataset):
-    def __init__(self, texts, tokenizer, max_length=512):
-        self.encodings = tokenizer(
-            texts,
-            truncation=True,
-            max_length=max_length,
-            padding="max_length",
-            return_tensors="pt",
-        )
+    def __init__(self, texts, tokenizer, max_length=512,
+                 tok_batch_size=10_000):
+        chunks_ids, chunks_mask = [], []
+        for i in range(0, len(texts), tok_batch_size):
+            enc = tokenizer(
+                texts[i : i + tok_batch_size],
+                truncation=True,
+                max_length=max_length,
+                padding="max_length",
+                return_tensors="pt",
+            )
+            chunks_ids.append(enc["input_ids"])
+            chunks_mask.append(enc["attention_mask"])
+        self.input_ids = torch.cat(chunks_ids)
+        self.attention_mask = torch.cat(chunks_mask)
 
     def __len__(self):
-        return self.encodings["input_ids"].shape[0]
+        return self.input_ids.shape[0]
 
     def __getitem__(self, idx):
-        return {k: v[idx] for k, v in self.encodings.items()}
+        return {
+            "input_ids": self.input_ids[idx],
+            "attention_mask": self.attention_mask[idx],
+        }
 
 
 def make_dataloader(texts, tokenizer, max_length, batch_size):
