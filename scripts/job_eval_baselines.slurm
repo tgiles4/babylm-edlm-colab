@@ -42,8 +42,16 @@ module load gnu10/10.3.0-ya
 module load python/3.9.9-jh
 module load cuda/12.4.0
 
-ENV=$SCRATCH/edlm/venv
-PY="$ENV/bin/python"
+# Dedicated eval venv with modern HuggingFace (no flash-attn needed)
+EVAL_ENV=${SCRATCH}/edlm/eval_venv
+if [ ! -f "${EVAL_ENV}/bin/activate" ]; then
+  echo "Creating eval venv at ${EVAL_ENV} ..."
+  python3 -m venv "${EVAL_ENV}"
+  "${EVAL_ENV}/bin/pip" install --upgrade pip
+  "${EVAL_ENV}/bin/pip" install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+  "${EVAL_ENV}/bin/pip" install transformers tokenizers huggingface_hub torchmetrics
+fi
+PY="${EVAL_ENV}/bin/python"
 
 # HuggingFace cache inside scratch so downloads persist between jobs
 export HF_HOME=${SCRATCH}/hf_cache

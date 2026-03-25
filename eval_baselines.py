@@ -36,8 +36,6 @@ import json
 import math
 import os
 import random
-import shutil
-import tempfile
 import time
 
 import torch
@@ -53,57 +51,6 @@ from transformers import (
 
 LOG2 = math.log(2)
 NEG_INF = -1_000_000.0
-
-# BPE fields that newer tokenizers versions write but older ones can't parse.
-_BPE_UNSUPPORTED_KEYS = {"byte_fallback", "ignore_merges"}
-
-
-def _patch_tokenizer_json(path: str) -> bool:
-    """Remove unsupported BPE fields from a tokenizer.json in-place.
-    Returns True if the file was modified."""
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    model = data.get("model", {})
-    if model.get("type") != "BPE":
-        return False
-    removed = {k: model.pop(k) for k in _BPE_UNSUPPORTED_KEYS if k in model}
-    if not removed:
-        return False
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False)
-    return True
-
-
-def _load_tokenizer(name_or_path: str, **kwargs) -> "AutoTokenizer":
-    """Load tokenizer, patching incompatible ``tokenizer.json`` fields
-    written by newer ``tokenizers`` versions if necessary."""
-    try:
-        return AutoTokenizer.from_pretrained(name_or_path, **kwargs)
-    except Exception as exc:
-        if "ModelWrapper" not in str(exc):
-            raise
-        print(f"  [WARN] fast tokenizer failed: {exc}")
-        print("  [WARN] patching tokenizer.json to remove unsupported BPE fields ...")
-        from huggingface_hub import snapshot_download
-        subfolder_kw = {k: v for k, v in kwargs.items() if k == "subfolder"}
-        cache_dir = snapshot_download(
-            name_or_path,
-            allow_patterns=["tokenizer*", "special_tokens_map*"],
-            **subfolder_kw,
-        )
-        tmp_dir = tempfile.mkdtemp(prefix="tok_patch_")
-        for fn in os.listdir(cache_dir):
-            src = os.path.join(cache_dir, fn)
-            if os.path.isfile(src):
-                shutil.copy2(src, tmp_dir)
-        tok_json = os.path.join(tmp_dir, "tokenizer.json")
-        if not os.path.isfile(tok_json):
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-            raise
-        _patch_tokenizer_json(tok_json)
-        tok = AutoTokenizer.from_pretrained(tmp_dir)
-        shutil.rmtree(tmp_dir, ignore_errors=True)
-        return tok
 
 
 # ---------------------------------------------------------------------------
@@ -337,7 +284,7 @@ def eval_diffusion(args):
     hf_model = AutoModelForMaskedLM.from_pretrained(
         args.model_name_or_path, subfolder=subfolder,
         trust_remote_code=True)
-    tokenizer = _load_tokenizer(
+    tokenizer = AutoTokenizer.from_pretrained(
         args.model_name_or_path, subfolder=subfolder)
 
     device = torch.device(args.device)
@@ -391,7 +338,7 @@ def eval_ar(args):
     """Evaluate an autoregressive (GPT-2) model."""
     print(f"Loading AR model from {args.model_name_or_path} ...")
     model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path)
-    tokenizer = _load_tokenizer(args.model_name_or_path)
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.pad_token_id = tokenizer.eos_token_id
@@ -488,7 +435,7 @@ def eval_gpt_bert(args):
     """Evaluate a GPT-BERT model with up to three NLL methods."""
     print(f"Loading GPT-BERT from {args.model_name_or_path} ...")
 
-    tokenizer = _load_tokenizer(args.model_name_or_path)
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.pad_token_id = tokenizer.eos_token_id
