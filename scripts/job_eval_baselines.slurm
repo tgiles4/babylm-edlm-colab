@@ -10,7 +10,7 @@
 #SBATCH --job-name=eval_baselines
 #SBATCH --qos=gpu
 #SBATCH --partition=contrib-gpuq
-#SBATCH --gres=gpu:3g.40gb:1
+#SBATCH --gres=gpu:A100.80gb:1
 
 #SBATCH --output=eval_baselines-%j.out
 #SBATCH --error=eval_baselines-%j.err
@@ -90,16 +90,14 @@ run_eval() {
 echo "===== Diffusion (despoinakk) ====="
 DIFF_REPO="despoinakk/diffusion_cosine_babylm"
 
-for SIZE in 10M 50M 100M 500M 1000M; do
-  run_eval \
-    --model_type diffusion \
-    --model_name_or_path ${DIFF_REPO} \
-    --checkpoint_subfolder chck_${SIZE} \
-    --data_dir ${DATA_DIR} \
-    --batch_size ${BATCH_SIZE} \
-    --seq_length ${SEQ_LENGTH} \
-    --output_json ${RESULTS}/diffusion_chck_${SIZE}.json
-done
+run_eval \
+  --model_type diffusion \
+  --model_name_or_path ${DIFF_REPO} \
+  --checkpoint_subfolder chck_1000M \
+  --data_dir ${DATA_DIR} \
+  --batch_size ${BATCH_SIZE} \
+  --seq_length ${SEQ_LENGTH} \
+  --output_json ${RESULTS}/diffusion_chck_1000M.json
 
 # ---------------------------------------------------------------------------
 # 2. BabyLM-community/babylm-baseline-100m-gpt2

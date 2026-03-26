@@ -293,7 +293,7 @@ def eval_diffusion(args):
 
     hf_model = AutoModelForMaskedLM.from_pretrained(
         args.model_name_or_path, subfolder=subfolder,
-        trust_remote_code=True)
+        trust_remote_code=True, torch_dtype=torch.bfloat16)
     tokenizer = AutoTokenizer.from_pretrained(
         args.model_name_or_path, subfolder=subfolder)
 
@@ -347,7 +347,8 @@ def compute_causal_nll(model, input_ids, attention_mask, device):
 def eval_ar(args):
     """Evaluate an autoregressive (GPT-2) model."""
     print(f"Loading AR model from {args.model_name_or_path} ...")
-    model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path)
+    model = AutoModelForCausalLM.from_pretrained(
+        args.model_name_or_path, torch_dtype=torch.bfloat16)
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -467,7 +468,8 @@ def eval_gpt_bert(args):
     if "causal" in methods:
         print("  [causal] loading CausalLM variant ...")
         causal_model = AutoModelForCausalLM.from_pretrained(
-            args.model_name_or_path, trust_remote_code=True)
+            args.model_name_or_path, trust_remote_code=True,
+            torch_dtype=torch.bfloat16)
         causal_model.eval().to(device)
 
         metrics = create_metrics(device)
@@ -490,7 +492,8 @@ def eval_gpt_bert(args):
         else:
             print("  [masked_ce] loading MaskedLM variant ...")
             masked_model = AutoModelForMaskedLM.from_pretrained(
-                args.model_name_or_path, trust_remote_code=True)
+                args.model_name_or_path, trust_remote_code=True,
+                torch_dtype=torch.bfloat16)
             masked_model.eval().to(device)
 
             metrics = create_metrics(device)
@@ -514,7 +517,8 @@ def eval_gpt_bert(args):
         else:
             print("  [pll] loading MaskedLM variant ...")
             masked_model = AutoModelForMaskedLM.from_pretrained(
-                args.model_name_or_path, trust_remote_code=True)
+                args.model_name_or_path, trust_remote_code=True,
+                torch_dtype=torch.bfloat16)
             masked_model.eval().to(device)
 
             pll_bs = max(1, args.batch_size // 4)
