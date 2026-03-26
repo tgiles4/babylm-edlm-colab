@@ -21,7 +21,7 @@
 #SBATCH --ntasks-per-node=1
 
 #SBATCH --mem=64G
-#SBATCH --time=0-12:00:00
+#SBATCH --time=1-00:00:00
 
 # ---------------------------------------------------------------------------
 # Environment
@@ -69,7 +69,7 @@ DATA_DIR=${SCRATCH}/babylm-edlm/data/train_100M
 RESULTS=${SCRATCH}/edlm/eval_results
 mkdir -p ${RESULTS}
 
-BATCH_SIZE=256
+BATCH_SIZE=1024
 SEQ_LENGTH=512
 
 # ---------------------------------------------------------------------------
