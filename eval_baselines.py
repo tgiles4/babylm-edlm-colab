@@ -468,8 +468,7 @@ def eval_gpt_bert(args):
     if "causal" in methods:
         print("  [causal] loading CausalLM variant ...")
         causal_model = AutoModelForCausalLM.from_pretrained(
-            args.model_name_or_path, trust_remote_code=True,
-            torch_dtype=torch.bfloat16)
+            args.model_name_or_path, trust_remote_code=True)
         causal_model.eval().to(device)
 
         metrics = create_metrics(device)
@@ -492,8 +491,7 @@ def eval_gpt_bert(args):
         else:
             print("  [masked_ce] loading MaskedLM variant ...")
             masked_model = AutoModelForMaskedLM.from_pretrained(
-                args.model_name_or_path, trust_remote_code=True,
-                torch_dtype=torch.bfloat16)
+                args.model_name_or_path, trust_remote_code=True)
             masked_model.eval().to(device)
 
             metrics = create_metrics(device)
@@ -517,8 +515,7 @@ def eval_gpt_bert(args):
         else:
             print("  [pll] loading MaskedLM variant ...")
             masked_model = AutoModelForMaskedLM.from_pretrained(
-                args.model_name_or_path, trust_remote_code=True,
-                torch_dtype=torch.bfloat16)
+                args.model_name_or_path, trust_remote_code=True)
             masked_model.eval().to(device)
 
             pll_bs = max(1, args.batch_size // 4)
