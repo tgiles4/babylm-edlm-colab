@@ -262,8 +262,9 @@ def _train(config, logger, tokenizer):
   # Resolve checkpoint path if resuming
   ckpt_path = None
   if config.checkpointing.resume_from_ckpt:
-    resume_path = omegaconf.OmegaConf.to_container(
-      config.checkpointing.resume_ckpt_path, resolve=True)
+    raw = config.checkpointing.resume_ckpt_path
+    resume_path = (omegaconf.OmegaConf.to_container(raw, resolve=True)
+                   if omegaconf.OmegaConf.is_config(raw) else str(raw))
     if resume_path and utils.fsspec_exists(resume_path):
       ckpt_path = resume_path
       logger.info(f'Resuming from checkpoint: {ckpt_path}')
