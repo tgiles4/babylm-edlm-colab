@@ -293,12 +293,12 @@ def eval_diffusion(args):
 
     hf_model = AutoModelForMaskedLM.from_pretrained(
         args.model_name_or_path, subfolder=subfolder,
-        trust_remote_code=True, torch_dtype=torch.bfloat16)
+        trust_remote_code=True)
     tokenizer = AutoTokenizer.from_pretrained(
         args.model_name_or_path, subfolder=subfolder)
 
     device = torch.device(args.device)
-    hf_model.eval().to(device)
+    hf_model.eval().to(device=device, dtype=torch.bfloat16)
     wrapper = DiffusionBERTWrapper(hf_model)
     noise = CosineNoise(eps=1e-3).to(device)
 
