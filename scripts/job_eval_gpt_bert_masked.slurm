@@ -48,6 +48,7 @@ if [ ! -f "${EVAL_ENV}/bin/activate" ]; then
 fi
 PY="${EVAL_ENV}/bin/python"
 
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export HF_HOME=${SCRATCH}/hf_cache
 mkdir -p ${HF_HOME}
 
@@ -62,7 +63,7 @@ DATA_DIR=${SCRATCH}/babylm-edlm/data/train_100M
 RESULTS=${SCRATCH}/edlm/eval_results
 mkdir -p ${RESULTS}
 
-BATCH_SIZE=1024
+BATCH_SIZE=128
 SEQ_LENGTH=512
 
 # ---------------------------------------------------------------------------
