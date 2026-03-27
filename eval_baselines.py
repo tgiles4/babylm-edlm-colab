@@ -334,7 +334,8 @@ def compute_causal_nll(model, input_ids, attention_mask, device):
     mask = attention_mask.to(device).float()
 
     with torch.no_grad(), torch.autocast(device_type=ids.device.type, dtype=torch.bfloat16):
-        logits = model(input_ids=ids, attention_mask=mask.long()).logits
+        out = model(input_ids=ids, attention_mask=mask.long())
+        logits = out.logits if hasattr(out, "logits") else out[0]
 
     shift_logits = logits[:, :-1, :].float().contiguous()
     shift_labels = ids[:, 1:].contiguous()
@@ -398,8 +399,8 @@ def compute_masked_ce(model, input_ids, attention_mask, device,
         masked_ids[masked_positions] = mask_token_id
 
         with torch.no_grad(), torch.autocast(device_type=ids.device.type, dtype=torch.bfloat16):
-            logits = model(input_ids=masked_ids,
-                           attention_mask=attn).logits
+            out = model(input_ids=masked_ids, attention_mask=attn)
+            logits = out.logits if hasattr(out, "logits") else out[0]
 
         log_probs = F.log_softmax(logits.float(), dim=-1)
         nll = -torch.gather(log_probs, -1, ids[:, :, None]).squeeze(-1)
@@ -431,8 +432,8 @@ def compute_pseudo_ll(model, input_ids, attention_mask, device,
             masked_ids[:, pos] = mask_token_id
 
         with torch.no_grad(), torch.autocast(device_type=ids.device.type, dtype=torch.bfloat16):
-            logits = model(input_ids=masked_ids,
-                           attention_mask=attn.long()).logits
+            out = model(input_ids=masked_ids, attention_mask=attn.long())
+            logits = out.logits if hasattr(out, "logits") else out[0]
 
         log_probs = F.log_softmax(logits.float(), dim=-1)
         for pos in positions:
