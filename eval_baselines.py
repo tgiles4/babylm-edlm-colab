@@ -333,10 +333,10 @@ def compute_causal_nll(model, input_ids, attention_mask, device):
     ids = input_ids.to(device)
     mask = attention_mask.to(device).float()
 
-    with torch.no_grad():
+    with torch.no_grad(), torch.autocast(device_type=ids.device.type, dtype=torch.bfloat16):
         logits = model(input_ids=ids, attention_mask=mask.long()).logits
 
-    shift_logits = logits[:, :-1, :].contiguous()
+    shift_logits = logits[:, :-1, :].float().contiguous()
     shift_labels = ids[:, 1:].contiguous()
     shift_mask = mask[:, 1:].contiguous()
 
@@ -397,11 +397,11 @@ def compute_masked_ce(model, input_ids, attention_mask, device,
         masked_ids = ids.clone()
         masked_ids[masked_positions] = mask_token_id
 
-        with torch.no_grad():
+        with torch.no_grad(), torch.autocast(device_type=ids.device.type, dtype=torch.bfloat16):
             logits = model(input_ids=masked_ids,
                            attention_mask=attn).logits
 
-        log_probs = F.log_softmax(logits, dim=-1)
+        log_probs = F.log_softmax(logits.float(), dim=-1)
         nll = -torch.gather(log_probs, -1, ids[:, :, None]).squeeze(-1)
 
         total_nlls += nll * masked_positions.float()
@@ -430,11 +430,11 @@ def compute_pseudo_ll(model, input_ids, attention_mask, device,
         for pos in positions:
             masked_ids[:, pos] = mask_token_id
 
-        with torch.no_grad():
+        with torch.no_grad(), torch.autocast(device_type=ids.device.type, dtype=torch.bfloat16):
             logits = model(input_ids=masked_ids,
                            attention_mask=attn.long()).logits
 
-        log_probs = F.log_softmax(logits, dim=-1)
+        log_probs = F.log_softmax(logits.float(), dim=-1)
         for pos in positions:
             total_nlls[:, pos] = -torch.gather(
                 log_probs[:, pos, :], -1,
@@ -469,8 +469,7 @@ def eval_gpt_bert(args):
     if "causal" in methods:
         print("  [causal] loading CausalLM variant ...")
         causal_model = AutoModelForCausalLM.from_pretrained(
-            args.model_name_or_path, trust_remote_code=True,
-            torch_dtype=torch.bfloat16)
+            args.model_name_or_path, trust_remote_code=True)
         causal_model.eval().to(device)
 
         metrics = create_metrics(device)
@@ -493,8 +492,7 @@ def eval_gpt_bert(args):
         else:
             print("  [masked_ce] loading MaskedLM variant ...")
             masked_model = AutoModelForMaskedLM.from_pretrained(
-                args.model_name_or_path, trust_remote_code=True,
-                torch_dtype=torch.bfloat16)
+                args.model_name_or_path, trust_remote_code=True)
             masked_model.eval().to(device)
 
             metrics = create_metrics(device)
@@ -518,8 +516,7 @@ def eval_gpt_bert(args):
         else:
             print("  [pll] loading MaskedLM variant ...")
             masked_model = AutoModelForMaskedLM.from_pretrained(
-                args.model_name_or_path, trust_remote_code=True,
-                torch_dtype=torch.bfloat16)
+                args.model_name_or_path, trust_remote_code=True)
             masked_model.eval().to(device)
 
             pll_bs = max(1, args.batch_size // 4)
