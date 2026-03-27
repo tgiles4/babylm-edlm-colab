@@ -316,7 +316,20 @@ def _train(config, logger, tokenizer):
     callbacks=callbacks,
     strategy=hydra.utils.instantiate(config.strategy),
     logger=wandb_logger)
-  trainer.fit(model, train_ds, valid_ds, ckpt_path=ckpt_path)
+
+  if ckpt_path is not None:
+    original_load = torch.load
+    def _patched_load(*args, **kwargs):
+      if 'weights_only' not in kwargs:
+        kwargs['weights_only'] = False
+      return original_load(*args, **kwargs)
+    torch.load = _patched_load
+    try:
+      trainer.fit(model, train_ds, valid_ds, ckpt_path=ckpt_path)
+    finally:
+      torch.load = original_load
+  else:
+    trainer.fit(model, train_ds, valid_ds)
 
 
 @hydra.main(version_base=None, config_path='configs',
