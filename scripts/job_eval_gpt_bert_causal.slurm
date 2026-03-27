@@ -63,7 +63,7 @@ DATA_DIR=${SCRATCH}/babylm-edlm/data/train_100M
 RESULTS=${SCRATCH}/edlm/eval_results
 mkdir -p ${RESULTS}
 
-BATCH_SIZE=512
+BATCH_SIZE=256
 SEQ_LENGTH=512
 
 # ---------------------------------------------------------------------------
