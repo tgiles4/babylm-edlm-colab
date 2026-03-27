@@ -269,7 +269,8 @@ def compute_diffusion_elbo(wrapper, input_ids, attention_mask, noise,
     xt = torch.where(move, mask_index, x0)
 
     # --- forward pass ----------------------------------------------------
-    logits = wrapper(xt, sigma, attention_mask.to(device))
+    with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+        logits = wrapper(xt, sigma, attention_mask.to(device))
 
     # --- subs parameterization  -> log p_theta ---------------------------
     logits[:, :, mask_index] += NEG_INF
@@ -468,7 +469,8 @@ def eval_gpt_bert(args):
     if "causal" in methods:
         print("  [causal] loading CausalLM variant ...")
         causal_model = AutoModelForCausalLM.from_pretrained(
-            args.model_name_or_path, trust_remote_code=True)
+            args.model_name_or_path, trust_remote_code=True,
+            torch_dtype=torch.bfloat16)
         causal_model.eval().to(device)
 
         metrics = create_metrics(device)
@@ -491,7 +493,8 @@ def eval_gpt_bert(args):
         else:
             print("  [masked_ce] loading MaskedLM variant ...")
             masked_model = AutoModelForMaskedLM.from_pretrained(
-                args.model_name_or_path, trust_remote_code=True)
+                args.model_name_or_path, trust_remote_code=True,
+                torch_dtype=torch.bfloat16)
             masked_model.eval().to(device)
 
             metrics = create_metrics(device)
@@ -515,7 +518,8 @@ def eval_gpt_bert(args):
         else:
             print("  [pll] loading MaskedLM variant ...")
             masked_model = AutoModelForMaskedLM.from_pretrained(
-                args.model_name_or_path, trust_remote_code=True)
+                args.model_name_or_path, trust_remote_code=True,
+                torch_dtype=torch.bfloat16)
             masked_model.eval().to(device)
 
             pll_bs = max(1, args.batch_size // 4)
