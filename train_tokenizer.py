@@ -215,6 +215,9 @@ def main():
     def test(text):
         return ' '.join(raw_tok.encode(text).tokens)
 
+    def decode(text):
+        return raw_tok.decode(raw_tok.encode(text).ids)
+
     texts = [
         """One of the most impressive long term hobby projects is Robert's Rocket Project. He started building a 100 lbf liquid engine in 2001, fired a regeneratively cooled version in 2007, started building a regen 250 lbf in 2008.""",
         """what are examples of interfaces that allow you to manage sets of queries (SQL, splunk, lucene/elastic, xpath, whatever other language)?""",
@@ -224,7 +227,10 @@ def main():
     ]
 
     for text in texts:
-        print(f"INPUT:  {text}\nTOKENS: {test(text)}\n", flush=True)
+        print(
+            f"INPUT:  {text}\nTOKENS: {test(text)}\nDECODE: {decode(text)}\n",
+            flush=True,
+        )
 
 
 if __name__ == '__main__':
