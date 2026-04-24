@@ -2,7 +2,8 @@
 Train a BPE tokenizer from BabyLM dataset files.
 
 10M and 100M use separate tokenizers (tokenizer_10M.json vs tokenizer_100M.json);
-they are not interchangeable.
+they are not interchangeable. Tokenization uses ByteLevel BPE (decoder aligned with
+the pre-tokenizer); retrain if you still have an older WhitespaceSplit-only JSON.
 
 Default paths are project_dir/data/train_{size} and project_dir/tokenizer/tokenizer_{size}.json.
   - Hopper: set --project_dir in your sbatch script (e.g. $SCRATCH/babylm-edlm).
@@ -16,7 +17,7 @@ import argparse
 import glob
 import os
 
-from tokenizers import Tokenizer, models, pre_tokenizers, trainers
+from tokenizers import Tokenizer, decoders, models, pre_tokenizers, processors, trainers
 from tokenizers.normalizers import NFD, Lowercase, Sequence, StripAccents
 from transformers import PreTrainedTokenizerFast
 
@@ -59,8 +60,12 @@ def train_bpe_tokenizer(
     # Use Sequence for combining normalizers (compatible with all tokenizers versions)
     tokenizer.normalizer = Sequence([NFD(), Lowercase(), StripAccents()])
 
-    # Set up pre-tokenizer (split on whitespace and punctuation)
-    tokenizer.pre_tokenizer = pre_tokenizers.WhitespaceSplit()
+    # ByteLevel pre-tokenizer + decoder + post-processor (GPT-2-style BPE).
+    # WhitespaceSplit leaves decoder unset; decode() then inserts spaces between
+    # every BPE merge piece ("hello wo r l d"), which breaks batch_decode output.
+    tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
+    tokenizer.decoder = decoders.ByteLevel()
+    tokenizer.post_processor = processors.ByteLevel()
 
     # Initialize trainer
     trainer = trainers.BpeTrainer(
@@ -224,4 +229,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
