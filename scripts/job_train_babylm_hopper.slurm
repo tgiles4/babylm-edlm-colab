@@ -4,7 +4,10 @@
 # leaving 3 epochs for the energy NCE model (job_train_babylm_energy_hopper.slurm).
 # Paths use $SCRATCH/babylm-edlm (see configs and HOPPER_SETUP.md).
 # Submit from repo root: sbatch scripts/job_train_babylm_hopper.slurm
-# For EBM (with energy) use job_train_babylm_energy_hopper.slurm and set BABYLM_CKPT to desired checkpoint.
+#
+# Checkpoints: edit BABYLM_RUN_NAME (or sbatch --export=NONE,BABYLM_RUN_NAME=...).
+# Diffusion: ${BABYLM_CHECKPOINT_ROOT}/checkpoints/${BABYLM_RUN_NAME}/checkpoints/ (Lightning subdir).
+# Energy job: same BABYLM_RUN_NAME -> saves under checkpoints/${BABYLM_RUN_NAME}_energy/...
 #SBATCH --job-name=babylm_mdlm
 #SBATCH --qos=gpu
 #SBATCH --partition=contrib-gpuq
@@ -25,6 +28,11 @@
 # Clone repo and set up environment (run on compute node). With --export=NONE, set SCRATCH if needed.
 export SCRATCH="${SCRATCH:-/scratch/$(id -un)}"
 export path=${SCRATCH}/edlm
+# Parent of checkpoints/ (matches project_dir default in configs when using $SCRATCH/babylm-edlm).
+export BABYLM_CHECKPOINT_ROOT="${BABYLM_CHECKPOINT_ROOT:-${SCRATCH}/babylm-edlm}"
+# --- Edit this name per experiment (no timestamp). Energy training uses the same name + _energy. ---
+BABYLM_RUN_NAME="${BABYLM_RUN_NAME:-babylm_100M}"
+CHECKPOINT_SAVE_DIR="${BABYLM_CHECKPOINT_ROOT}/checkpoints/${BABYLM_RUN_NAME}"
 mkdir -p ${path}
 cd ${path}
 
@@ -47,6 +55,8 @@ if [ -f "${HOME}/.wandb_api_key" ]; then
   export WANDB_API_KEY=$(cat "${HOME}/.wandb_api_key")
 fi
 
+echo "checkpointing.save_dir -> ${CHECKPOINT_SAVE_DIR}"
+
 # 2-GPU DDP via srun. Uses --mpi=pmi2 to work around cluster-wide PMIx hang (SLURM 24.11.5).
 # batch_size=112 per GPU (128 OOMs with DDP overhead); accumulate_grad_batches auto-computes to 2.
 # loader.num_workers=0 avoids DataLoader BrokenPipe with multi-GPU DDP.
@@ -67,6 +77,8 @@ srun --ntasks=2 --ntasks-per-node=2 --mpi=pmi2 --export=ALL "$ENV/bin/python" -u
   optim.lr=0.007 \
   optim.weight_decay=0.1 \
   lr_scheduler=cosine_decay_warmup \
+  checkpointing.save_dir=${CHECKPOINT_SAVE_DIR} \
+  callbacks.checkpoint_monitor.save_last=true \
   wandb.id=null \
   wandb.group=babylm_mdlm \
-  wandb.name=babylm_100M
+  wandb.name=${BABYLM_RUN_NAME}

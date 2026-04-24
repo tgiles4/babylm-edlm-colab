@@ -1,9 +1,15 @@
 #!/bin/bash
 # BabyLM EBM (with energy): finetune from a chosen diffusion checkpoint on Hopper (2× A100 80GB).
-# MDLM is trained for 10 epochs (full BabyLM budget); you choose which checkpoint to load (e.g. last.ckpt,
-# or an earlier checkpoint from that run). Requires at least 2 GPUs.
+# MDLM is trained for 10 epochs (full BabyLM budget). Requires at least 2 GPUs.
 # Paths use $SCRATCH/babylm-edlm (see configs and HOPPER_SETUP.md).
-# Submit: sbatch --export=NONE,BABYLM_CKPT=/path/to/checkpoint.ckpt scripts/job_train_babylm_energy_hopper.slurm
+#
+# Naming: set BABYLM_RUN_NAME to the same value as in job_train_babylm_hopper.slurm.
+# EBM checkpoints: ${BABYLM_CHECKPOINT_ROOT}/checkpoints/${BABYLM_RUN_NAME}_energy/checkpoints/
+#
+# Backbone checkpoint: by default loads last.ckpt from the diffusion run. Override with:
+#   BABYLM_BACKBONE_CKPT=best   -> lowest val/nll among best-*.ckpt
+#   BABYLM_CKPT=/path/to.ckpt   -> explicit path (wins over BABYLM_BACKBONE_CKPT)
+# Submit: sbatch scripts/job_train_babylm_energy_hopper.slurm
 #SBATCH --job-name=babylm_energy
 #SBATCH --qos=gpu
 #SBATCH --partition=contrib-gpuq
@@ -23,14 +29,36 @@
 
 export SCRATCH="${SCRATCH:-/scratch/$(id -un)}"
 export path=${SCRATCH}/edlm
-# Which diffusion checkpoint to load as EBM backbone. MDLM is trained for 10 epochs; choose any checkpoint
-# from that run (e.g. last.ckpt for final, or a step checkpoint for an earlier point).
-export BABYLM_CKPT="${BABYLM_CKPT:-}"
+export BABYLM_CHECKPOINT_ROOT="${BABYLM_CHECKPOINT_ROOT:-${SCRATCH}/babylm-edlm}"
+# --- Same BABYLM_RUN_NAME as job_train_babylm_hopper.slurm (energy run dir adds _energy). ---
+BABYLM_RUN_NAME="${BABYLM_RUN_NAME:-babylm_100M}"
+ENERGY_RUN_NAME="${BABYLM_RUN_NAME}_energy"
+CHECKPOINT_SAVE_DIR="${BABYLM_CHECKPOINT_ROOT}/checkpoints/${ENERGY_RUN_NAME}"
+
+DIFFUSION_CKPT_DIR="${BABYLM_CHECKPOINT_ROOT}/checkpoints/${BABYLM_RUN_NAME}/checkpoints"
+# last | best (best = lowest val/nll in filename among best-*.ckpt)
+BABYLM_BACKBONE_CKPT="${BABYLM_BACKBONE_CKPT:-last}"
+
 if [ -z "${BABYLM_CKPT}" ]; then
-  echo "ERROR: BABYLM_CKPT must be set to a diffusion checkpoint from your MDLM run."
-  echo "Example: sbatch --export=NONE,BABYLM_CKPT=/path/to/checkpoints/.../last.ckpt scripts/job_train_babylm_energy_hopper.slurm"
-  exit 1
+  if [ "${BABYLM_BACKBONE_CKPT}" = "best" ]; then
+    BABYLM_CKPT=$(ls "${DIFFUSION_CKPT_DIR}"/best-*.ckpt 2>/dev/null | sort -t'-' -k2 -n | head -1)
+    if [ -z "${BABYLM_CKPT}" ]; then
+      echo "ERROR: BABYLM_BACKBONE_CKPT=best but no best-*.ckpt in ${DIFFUSION_CKPT_DIR}"
+      ls -la "${DIFFUSION_CKPT_DIR}"/*.ckpt 2>/dev/null || echo "(no .ckpt files)"
+      exit 1
+    fi
+  else
+    BABYLM_CKPT="${DIFFUSION_CKPT_DIR}/last.ckpt"
+    if [ ! -f "${BABYLM_CKPT}" ]; then
+      echo "ERROR: Expected backbone checkpoint not found: ${BABYLM_CKPT}"
+      echo "Train MDLM first with the same BABYLM_RUN_NAME, or set BABYLM_CKPT to a .ckpt path."
+      exit 1
+    fi
+  fi
 fi
+
+echo "eval.checkpoint_path (diffusion backbone) -> ${BABYLM_CKPT}"
+echo "checkpointing.save_dir (EBM) -> ${CHECKPOINT_SAVE_DIR}"
 
 # Clone repo and set up environment (run on compute node).
 mkdir -p ${path}
@@ -75,7 +103,8 @@ srun --ntasks=2 --ntasks-per-node=2 --mpi=pmi2 --export=ALL "$ENV/bin/python" -u
   optim.weight_decay=0.03 \
   lr_scheduler=cosine_decay_warmup \
   lr_scheduler.warmup_t=2000 \
+  checkpointing.save_dir=${CHECKPOINT_SAVE_DIR} \
   checkpointing.resume_from_ckpt=false \
   wandb.id=null \
   wandb.group=babylm_energy \
-  wandb.name=babylm_100M_energy
+  wandb.name=${ENERGY_RUN_NAME}
