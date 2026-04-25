@@ -4,7 +4,7 @@
 # Paths use $SCRATCH/babylm-edlm (see configs and HOPPER_SETUP.md).
 #
 # Naming: set BABYLM_RUN_NAME to the same value as in job_train_babylm_hopper.slurm.
-# EBM checkpoints: ${BABYLM_CHECKPOINT_ROOT}/checkpoints/${BABYLM_RUN_NAME}_energy/checkpoints/
+# EBM checkpoints: ${BABYLM_CHECKPOINT_ROOT}/checkpoints/${BABYLM_RUN_NAME}_energy/
 #
 # Backbone checkpoint: by default loads last.ckpt from the diffusion run. Override with:
 #   BABYLM_BACKBONE_CKPT=best   -> lowest val/nll among best-*.ckpt
@@ -35,7 +35,7 @@ BABYLM_RUN_NAME="${BABYLM_RUN_NAME:-babylm_100M}"
 ENERGY_RUN_NAME="${BABYLM_RUN_NAME}_energy"
 CHECKPOINT_SAVE_DIR="${BABYLM_CHECKPOINT_ROOT}/checkpoints/${ENERGY_RUN_NAME}"
 
-DIFFUSION_CKPT_DIR="${BABYLM_CHECKPOINT_ROOT}/checkpoints/${BABYLM_RUN_NAME}/checkpoints"
+DIFFUSION_CKPT_DIR="${BABYLM_CHECKPOINT_ROOT}/checkpoints/${BABYLM_RUN_NAME}"
 # last | best (best = lowest val/nll in filename among best-*.ckpt)
 BABYLM_BACKBONE_CKPT="${BABYLM_BACKBONE_CKPT:-last}"
 

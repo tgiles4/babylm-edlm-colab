@@ -1,12 +1,10 @@
 #!/bin/bash
 # BabyLM MDLM only (no energy): DIT diffusion training on Hopper (2× A100 80GB).
-# BabyLM rules: 10 epoch total budget. This script trains the backbone for 7 epochs,
-# leaving 3 epochs for the energy NCE model (job_train_babylm_energy_hopper.slurm).
+# BabyLM rules: 10 epoch total budget.
 # Paths use $SCRATCH/babylm-edlm (see configs and HOPPER_SETUP.md).
 # Submit from repo root: sbatch scripts/job_train_babylm_hopper.slurm
-#
 # Checkpoints: edit BABYLM_RUN_NAME (or sbatch --export=NONE,BABYLM_RUN_NAME=...).
-# Diffusion: ${BABYLM_CHECKPOINT_ROOT}/checkpoints/${BABYLM_RUN_NAME}/checkpoints/ (Lightning subdir).
+# Diffusion: ${BABYLM_CHECKPOINT_ROOT}/checkpoints/${BABYLM_RUN_NAME}/ (Lightning ModelCheckpoint dirpath).
 # Energy job: same BABYLM_RUN_NAME -> saves under checkpoints/${BABYLM_RUN_NAME}_energy/...
 #SBATCH --job-name=babylm_mdlm
 #SBATCH --qos=gpu
@@ -58,7 +56,7 @@ fi
 echo "checkpointing.save_dir -> ${CHECKPOINT_SAVE_DIR}"
 
 # 2-GPU DDP via srun. Uses --mpi=pmi2 to work around cluster-wide PMIx hang (SLURM 24.11.5).
-# batch_size=112 per GPU (128 OOMs with DDP overhead); accumulate_grad_batches auto-computes to 2.
+# global_batch_size=512 with batch_size=128 -> accumulate_grad_batches=2 (see configs/config.yaml).
 # loader.num_workers=0 avoids DataLoader BrokenPipe with multi-GPU DDP.
 srun --ntasks=2 --ntasks-per-node=2 --mpi=pmi2 --export=ALL "$ENV/bin/python" -u -m main \
   ++path=${path} \
@@ -67,18 +65,21 @@ srun --ntasks=2 --ntasks-per-node=2 --mpi=pmi2 --export=ALL "$ENV/bin/python" -u
   model=small \
   model.length=512 \
   dataset_size=100M \
-  loader.global_batch_size=448 \
-  loader.batch_size=112 \
+  loader.global_batch_size=512 \
+  loader.batch_size=128 \
   loader.eval_batch_size=128 \
   loader.num_workers=0 \
   trainer.max_epochs=10 \
   trainer.val_check_interval=1.0 \
-  trainer.gradient_clip_val=1.0 \
+  trainer.gradient_clip_val=2.0 \
   optim.lr=0.007 \
   optim.weight_decay=0.1 \
   lr_scheduler=cosine_decay_warmup \
   checkpointing.save_dir=${CHECKPOINT_SAVE_DIR} \
+  checkpointing.resume_from_ckpt=true \
+  checkpointing.resume_ckpt_path=${CHECKPOINT_SAVE_DIR}/last.ckpt \
   callbacks.checkpoint_monitor.save_last=true \
   wandb.id=null \
   wandb.group=babylm_mdlm \
-  wandb.name=${BABYLM_RUN_NAME}
+  wandb.name=${BABYLM_RUN_NAME} \
+  wandb.notes=Base MDLM for BabyLM 100M 10 epochs

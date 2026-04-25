@@ -157,6 +157,23 @@ def _print_batch(train_ds, valid_ds, tokenizer, k=64):
     print('ids:', last)
 
 
+def _truncate_samples_at_first_eos(samples, eos_token_id):
+  """Truncate each sampled sequence at its first EOS (inclusive)."""
+  if eos_token_id is None:
+    return samples.tolist()
+
+  truncated = []
+  for seq in samples:
+    seq_cpu = seq.detach().cpu()
+    eos_positions = (seq_cpu == eos_token_id).nonzero(as_tuple=False)
+    if eos_positions.numel() > 0:
+      end_idx = int(eos_positions[0].item()) + 1
+      truncated.append(seq_cpu[:end_idx].tolist())
+    else:
+      truncated.append(seq_cpu.tolist())
+  return truncated
+
+
 def generate_samples(config, logger, tokenizer):
   logger.info('Generating samples.')
   model = _load_from_checkpoint(config=config,
@@ -192,7 +209,12 @@ def generate_samples(config, logger, tokenizer):
       # Entropy Metrics
       model.compute_entropy(samples)
       # Generative Perplexity Metrics
-      text_samples = model.tokenizer.batch_decode(samples)
+      decode_input = samples
+      if config.sampling.truncate_at_eos:
+        decode_input = _truncate_samples_at_first_eos(
+          samples, model.tokenizer.eos_token_id)
+      text_samples = model.tokenizer.batch_decode(
+        decode_input, skip_special_tokens=False)
       model.compute_generative_perplexity(text_samples)
   print('Text samples:', text_samples)
   if not config.sampling.semi_ar:

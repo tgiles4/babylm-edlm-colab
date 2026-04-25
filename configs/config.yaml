@@ -37,6 +37,7 @@ sampling:
   predictor: ddpm_cache  # analytic, ddpm, ddpm_cache
   steps: 128
   noise_removal: True
+  truncate_at_eos: False  # Truncate generated samples at first EOS before decoding/eval
   # TODO(yair): @subham, why aren't these params under `eval`?
   num_sample_batches: 2  # Total samples: `num_gpus` * `loader.eval_batch_size` * num_sample_batches
   num_sample_log: 2
@@ -124,6 +125,5 @@ hydra:
 checkpointing:
   # Hopper default: checkpoints under project_dir. Colab: override checkpointing.save_dir=/content/drive/MyDrive/babylm-edlm/checkpoints
   save_dir: ${project_dir}/checkpoints/${data.train}/${dataset_size}/${use_energy}/${now:%Y.%m.%d}/${now:%H%M%S}
-  # Note: `checkpoints` subdirectory is added by the callback dirpath
   resume_from_ckpt: false  # Set to true to resume from a specific checkpoint
-  resume_ckpt_path: ${.save_dir}/checkpoints/last.ckpt
+  resume_ckpt_path: ${.save_dir}/last.ckpt

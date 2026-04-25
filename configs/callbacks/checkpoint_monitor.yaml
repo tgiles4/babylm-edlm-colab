@@ -4,7 +4,7 @@ checkpoint_monitor:
   mode: min # can be "max" or "min"
   save_top_k: 10 # save k best models (determined by above metric)
   save_last: False # True = additionally always save model from last epoch
-  dirpath: ${checkpointing.save_dir}/checkpoints
+  dirpath: ${checkpointing.save_dir}
   filename: best-{val/nll:.4f}
   auto_insert_metric_name: False
   verbose: True
