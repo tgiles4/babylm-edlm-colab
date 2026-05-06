@@ -91,7 +91,7 @@ srun --ntasks=2 --ntasks-per-node=2 --mpi=pmi2 --export=ALL "$ENV/bin/python" -u
   use_energy=True \
   data=babylm \
   model=small \
-  model.length=256 \
+  model.length=512 \
   dataset_size=100M \
   eval.checkpoint_path=${BABYLM_CKPT} \
   ebm_backbone=dit \

@@ -1,27 +1,31 @@
 #!/bin/bash
-# BabyLM MDLM only (no energy): DIT diffusion training on Hopper (2× A100 80GB).
+# BabyLM MDLM only (no energy): DIT diffusion on Hopper.
+# Requests 4× A100 80GB across 2 nodes (2 GPUs/node).
 # BabyLM rules: 10 epoch total budget.
 # Paths use $SCRATCH/babylm-edlm (see configs and HOPPER_SETUP.md).
-# Submit from repo root: sbatch scripts/job_train_babylm_hopper.slurm
-# Checkpoints: edit BABYLM_RUN_NAME (or sbatch --export=NONE,BABYLM_RUN_NAME=...).
-# Diffusion: ${BABYLM_CHECKPOINT_ROOT}/checkpoints/${BABYLM_RUN_NAME}/ (Lightning ModelCheckpoint dirpath).
-# Energy job: same BABYLM_RUN_NAME -> saves under checkpoints/${BABYLM_RUN_NAME}_energy/...
+# Checkpoints: ${BABYLM_CHECKPOINT_ROOT}/checkpoints/${BABYLM_RUN_NAME}/ (Lightning ModelCheckpoint dirpath).
+# Energy follow-up: same BABYLM_RUN_NAME -> checkpoints/${BABYLM_RUN_NAME}_energy/ (job_train_babylm_energy_hopper.slurm).
+#
+# Partition notes:
+#   - gpuq: non-pre-emptible
+#   - contrib-gpuq: same nodes, may be pre-empted (often faster queue time)
+#
+# Submit examples:
+#   sbatch scripts/job_train_babylm_hopper.slurm
+#   sbatch --export=NONE,BABYLM_RUN_NAME=my_run scripts/job_train_babylm_hopper.slurm
+#
 #SBATCH --job-name=babylm_mdlm
 #SBATCH --qos=gpu
 #SBATCH --partition=contrib-gpuq
 #SBATCH --gres=gpu:A100.80gb:2
-
 #SBATCH --output=babylm_mdlm-%j.out
 #SBATCH --error=babylm_mdlm-%j.err
 #SBATCH --export=NONE
-#SBATCH --constraint=amd
-
-#SBATCH --nodes=1
-# Must match gres GPU count for DDP.
+#SBATCH --nodes=2
 #SBATCH --ntasks-per-node=2
-
+#SBATCH --constraint=amd
 #SBATCH --mem=64G
-#SBATCH --time=3-00:00:00
+#SBATCH --time=3-0:00:00
 
 # Clone repo and set up environment (run on compute node). With --export=NONE, set SCRATCH if needed.
 export SCRATCH="${SCRATCH:-/scratch/$(id -un)}"
@@ -29,7 +33,7 @@ export path=${SCRATCH}/edlm
 # Parent of checkpoints/ (matches project_dir default in configs when using $SCRATCH/babylm-edlm).
 export BABYLM_CHECKPOINT_ROOT="${BABYLM_CHECKPOINT_ROOT:-${SCRATCH}/babylm-edlm}"
 # --- Edit this name per experiment (no timestamp). Energy training uses the same name + _energy. ---
-BABYLM_RUN_NAME="${BABYLM_RUN_NAME:-babylm_100M}"
+BABYLM_RUN_NAME="${BABYLM_RUN_NAME:-babylm_strict}"
 CHECKPOINT_SAVE_DIR="${BABYLM_CHECKPOINT_ROOT}/checkpoints/${BABYLM_RUN_NAME}"
 mkdir -p ${path}
 cd ${path}
@@ -55,11 +59,13 @@ fi
 
 echo "checkpointing.save_dir -> ${CHECKPOINT_SAVE_DIR}"
 
-# 2-GPU DDP via srun. Uses --mpi=pmi2 to work around cluster-wide PMIx hang (SLURM 24.11.5).
-# global_batch_size=512 with batch_size=128 -> accumulate_grad_batches=2 (see configs/config.yaml).
+# 4-GPU multi-node DDP via srun. Uses --mpi=pmi2 to work around cluster-wide PMIx hang (SLURM 24.11.5).
+# global_batch_size=512 with batch_size=128 on 2×2 GPUs -> accumulate_grad_batches=1 (see configs/config.yaml).
 # loader.num_workers=0 avoids DataLoader BrokenPipe with multi-GPU DDP.
-srun --ntasks=2 --ntasks-per-node=2 --mpi=pmi2 --export=ALL "$ENV/bin/python" -u -m main \
+srun --ntasks=4 --ntasks-per-node=2 --mpi=pmi2 --export=ALL "$ENV/bin/python" -u -m main \
   ++path=${path} \
+  trainer.num_nodes=2 \
+  trainer.devices=2 \
   use_energy=False \
   data=babylm \
   model=small \
@@ -70,7 +76,7 @@ srun --ntasks=2 --ntasks-per-node=2 --mpi=pmi2 --export=ALL "$ENV/bin/python" -u
   loader.eval_batch_size=128 \
   loader.num_workers=0 \
   trainer.max_epochs=10 \
-  trainer.val_check_interval=1.0 \
+  trainer.val_check_interval=0.25 \
   trainer.gradient_clip_val=2.0 \
   optim.lr=0.007 \
   optim.weight_decay=0.1 \
@@ -79,7 +85,8 @@ srun --ntasks=2 --ntasks-per-node=2 --mpi=pmi2 --export=ALL "$ENV/bin/python" -u
   checkpointing.resume_from_ckpt=true \
   checkpointing.resume_ckpt_path=${CHECKPOINT_SAVE_DIR}/last.ckpt \
   callbacks.checkpoint_monitor.save_last=true \
+  callbacks.checkpoint_every_n_steps.every_n_train_steps=200 \
   wandb.id=null \
   wandb.group=babylm_mdlm \
   wandb.name=${BABYLM_RUN_NAME} \
-  wandb.notes=Base MDLM for BabyLM 100M 10 epochs
+  'wandb.notes=Base MDLM for BabyLM 100M 10 epochs'
